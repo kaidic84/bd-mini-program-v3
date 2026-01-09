@@ -1,0 +1,304 @@
+﻿import React, { useState, useEffect } from 'react';
+import { dataService } from '@/services/dataService';
+import type { Deal, Project } from '@/types/bd';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Search } from 'lucide-react';
+// 飞书时间戳兜底展示
+import { formatDateSafe } from '@/lib/date';
+
+const DealsTab: React.FC = () => {
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [filteredDeals, setFilteredDeals] = useState<Deal[]>([]);
+  const [monthFilter, setMonthFilter] = useState<string>('all');
+  const [signCompanyFilter, setSignCompanyFilter] = useState<string>('all');
+  const [finishFilter, setFinishFilter] = useState<string>('all');
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    filterDeals();
+  }, [deals, projects, searchKeyword, monthFilter, signCompanyFilter, finishFilter]);
+
+  const loadData = async () => {
+    const [dealsData, projectsData] = await Promise.all([
+      dataService.getAllDeals(),
+      dataService.getAllProjects(),
+    ]);
+    setDeals(dealsData);
+    setProjects(projectsData);
+  };
+
+  const filterDeals = () => {
+    let result = [...deals];
+
+    if (searchKeyword) {
+      const keyword = searchKeyword.toLowerCase();
+      result = result.filter((d) =>
+        getProjectName(d).toLowerCase().includes(keyword)
+      );
+    }
+
+    if (monthFilter !== 'all') {
+      const extractMonth = (raw: any) => {
+        if (raw === null || raw === undefined) return '';
+        const str = String(raw).trim();
+        if (!str) return '';
+        const match = str.match(/(\d{1,2})\s*$/);
+        if (match) return String(Number(match[1]));
+        const parts = str.replace(/\//g, '.').replace(/-/g, '.').split('.');
+        const last = parts[parts.length - 1];
+        if (!last) return '';
+        const n = Number(last);
+        return Number.isFinite(n) ? String(n) : '';
+      };
+      const targetMonth = Number(monthFilter);
+      result = result.filter((d) => Number(extractMonth(d.month || d.startDate)) === targetMonth);
+    }
+
+    if (signCompanyFilter !== 'all') {
+      result = result.filter(d => String(d.signCompany || '').trim() === signCompanyFilter);
+    }
+
+    if (finishFilter !== 'all') {
+      const match = finishFilter === 'yes';
+      result = result.filter((d) => {
+        const raw = d.isFinished;
+        const normalized =
+          raw === true || raw === 'true' || raw === '是' || raw === '已完结'
+            ? true
+            : raw === false || raw === 'false' || raw === '否' || raw === '进行中'
+              ? false
+              : undefined;
+        return normalized === match;
+      });
+    }
+
+    setFilteredDeals(result);
+  };
+
+  const projectNameMap = new Map(
+    projects.map((p) => [String(p.projectId || '').trim(), String(p.projectName || '').trim()])
+  );
+
+  const getProjectName = (deal: Deal): string => {
+    const directName = String(deal.projectName || '').trim();
+    if (directName) return directName;
+    const key = String(deal.projectId || deal.dealId || '').trim();
+    return projectNameMap.get(key) || '-';
+  };
+
+  const formatCurrency = (value?: number | string): string => {
+    if (value === undefined || value === null || value === '') return '-';
+    const n = Number(value);
+    if (!Number.isFinite(n)) return String(value);
+    return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', minimumFractionDigits: 0 }).format(n);
+  };
+
+  const renderFinishStatus = (raw: any) => {
+    if (raw === true || raw === 'true' || raw === '是') return '已完结';
+    if (raw === false || raw === 'false' || raw === '否') return '进行中';
+    return raw || '-';
+  };
+
+  const handleDealClick = (deal: Deal) => {
+    setSelectedDeal(deal);
+    setShowDetail(true);
+  };
+
+  // 统计数据
+  const totalIncome = filteredDeals.reduce((sum, d) => sum + (d.incomeWithTax || 0), 0);
+  const totalReceived = filteredDeals.reduce((sum, d) => sum + (d.receivedAmount || 0), 0);
+  const totalRemaining = filteredDeals.reduce((sum, d) => sum + (d.remainingReceivable || 0), 0);
+  const monthOptions = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  const signCompanyOptions = Array.from(
+    new Set(deals.map((d) => String(d.signCompany || '').trim()).filter((v) => v))
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* 筛选栏 */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex flex-col gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="搜索项目名称..."
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <Select value={monthFilter} onValueChange={setMonthFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="选择月份" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部月份</SelectItem>
+                  {monthOptions.map(month => (
+                    <SelectItem key={month} value={month}>{month}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={signCompanyFilter} onValueChange={setSignCompanyFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="签约公司主体" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部主体</SelectItem>
+                  {signCompanyOptions.map((name) => (
+                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={finishFilter} onValueChange={setFinishFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="是否完结" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部状态</SelectItem>
+                  <SelectItem value="yes">已完结</SelectItem>
+                  <SelectItem value="no">进行中</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 统计卡片 */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card>
+          <CardContent className="pt-4">
+            <div className="text-xs text-muted-foreground">总收入（含税）</div>
+            <div className="text-lg font-semibold text-foreground mt-1">
+              {formatCurrency(totalIncome)}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="text-xs text-muted-foreground">已收金额</div>
+            <div className="text-lg font-semibold text-success mt-1">
+              {formatCurrency(totalReceived)}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="text-xs text-muted-foreground">剩余应收</div>
+            <div className="text-lg font-semibold text-warning mt-1">
+              {formatCurrency(totalRemaining)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 立项卡片 */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {filteredDeals.map((deal, idx) => {
+          const finishText = renderFinishStatus(deal.isFinished);
+          const finishVariant = finishText === '已完结' ? 'default' : 'secondary';
+          return (
+            <Card
+              key={`${deal.dealId || 'deal'}-${deal.projectId || idx}`}
+              className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50"
+              onClick={() => handleDealClick(deal)}
+            >
+              <CardContent className="pt-4">
+                <div className="flex items-start justify-between mb-2 gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm line-clamp-2">{getProjectName(deal)}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      项目ID: {deal.projectId || deal.dealId || '-'}
+                    </div>
+                  </div>
+                  <Badge variant={finishVariant} className="text-xs shrink-0">
+                    {finishText}
+                  </Badge>
+                </div>
+                <div className="mt-3 text-xs text-muted-foreground space-y-1">
+                  <div>
+                    含税收入：<span className="text-foreground">{formatCurrency(deal.incomeWithTax)}</span>
+                  </div>
+                  <div>签约主体：{deal.signCompany || '-'}</div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {filteredDeals.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          暂无立项数据
+        </div>
+      )}
+
+      <Dialog open={showDetail} onOpenChange={setShowDetail}>
+        <DialogContent className="max-w-2xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>{selectedDeal ? getProjectName(selectedDeal) : '立项详情'}</DialogTitle>
+          </DialogHeader>
+          {selectedDeal && (
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-muted-foreground">项目ID：</span>
+                <span className="font-mono">{selectedDeal.projectId || '-'}</span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-muted-foreground">项目名称：</span>
+                <span>{getProjectName(selectedDeal)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">是否完结：</span>
+                <span>{renderFinishStatus(selectedDeal.isFinished)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">所属月份：</span>
+                <span>{selectedDeal.month || '-'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">项目开始：</span>
+                <span>{formatDateSafe(selectedDeal.startDate) || '-'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">项目结束：</span>
+                <span>{formatDateSafe(selectedDeal.endDate) || '-'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">归属：</span>
+                <span>{selectedDeal.belong || '-'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">含税收入：</span>
+                <span>{formatCurrency(selectedDeal.incomeWithTax)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">不含税收入：</span>
+                <span>{formatCurrency(selectedDeal.incomeWithoutTax)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">签约主体：</span>
+                <span>{selectedDeal.signCompany || '-'}</span>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default DealsTab;
