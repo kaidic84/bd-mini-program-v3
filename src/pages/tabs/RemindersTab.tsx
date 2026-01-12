@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -83,6 +84,20 @@ const matchBdName = (value: unknown, expected: string) => {
   return parts.includes(target);
 };
 
+const toInputDate = (value?: string) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(raw)) return raw.replace(/\//g, '-');
+  const normalized = raw.replace(/[./]/g, '-');
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return '';
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 const RemindersTab: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'unfinished' | 'finished' | 'signed'>('unfinished');
@@ -91,6 +106,18 @@ const RemindersTab: React.FC = () => {
   const [signedReminders, setSignedReminders] = useState<SignedReminderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmingIds, setConfirmingIds] = useState<Set<string>>(new Set());
+  const [updatingStageIds, setUpdatingStageIds] = useState<Set<string>>(new Set());
+  const [updatingDealIds, setUpdatingDealIds] = useState<Set<string>>(new Set());
+  const [finishingDealIds, setFinishingDealIds] = useState<Set<string>>(new Set());
+  const [dealEndDateDrafts, setDealEndDateDrafts] = useState<Record<string, string>>({});
+
+  const formatTodaySlash = () => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `${yyyy}/${mm}/${dd}`;
+  };
 
   const loadReminders = useCallback(async () => {
     setLoading(true);
@@ -140,6 +167,104 @@ const RemindersTab: React.FC = () => {
       setConfirmingIds(prev => {
         const next = new Set(prev);
         next.delete(projectId);
+        return next;
+      });
+    }
+  };
+
+  const handleUpdateStage = async (projectId: string, nextStage: 'FA' | '丢单') => {
+    setUpdatingStageIds(prev => new Set(prev).add(projectId));
+    try {
+      const success = await dataService.updateProject(projectId, {
+        stage: nextStage,
+        lastUpdateDate: formatTodaySlash(),
+      });
+      if (success) {
+        toast.success(`项目阶段已更新为 ${nextStage}`);
+        setUnfinishedReminders((prev) => prev.filter((item) => item.projectId !== projectId));
+      } else {
+        toast.error('更新项目阶段失败');
+      }
+    } catch (error) {
+      console.error('更新项目阶段失败:', error);
+      toast.error('更新项目阶段失败');
+    } finally {
+      setUpdatingStageIds(prev => {
+        const next = new Set(prev);
+        next.delete(projectId);
+        return next;
+      });
+    }
+  };
+
+  const handleEndDateChange = (dealId: string, nextValue: string) => {
+    setDealEndDateDrafts((prev) => ({ ...prev, [dealId]: nextValue }));
+  };
+
+  const handleSaveEndDate = async (item: FinishedReminderItem) => {
+    if (!item.dealId) {
+      toast.error('缺少立项ID，无法更新结束时间');
+      return;
+    }
+    const draft = dealEndDateDrafts[item.dealId] ?? toInputDate(item.projectEndDate);
+    if (!draft) {
+      toast.error('请选择项目结束时间');
+      return;
+    }
+    setUpdatingDealIds((prev) => new Set(prev).add(item.dealId));
+    try {
+      const success = await dataService.updateDeal(item.dealId, { endDate: draft });
+      if (success) {
+        toast.success('项目结束时间已更新');
+        setDealEndDateDrafts((prev) => ({ ...prev, [item.dealId]: draft }));
+        await loadReminders();
+      } else {
+        toast.error('更新项目结束时间失败');
+      }
+    } catch (error) {
+      console.error('更新项目结束时间失败:', error);
+      toast.error('更新项目结束时间失败');
+    } finally {
+      setUpdatingDealIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.dealId);
+        return next;
+      });
+    }
+  };
+
+  const handleMarkDealFinished = async (item: FinishedReminderItem) => {
+    if (!item.dealId) {
+      toast.error('缺少立项ID，无法更新是否完结');
+      return;
+    }
+    setFinishingDealIds((prev) => new Set(prev).add(item.dealId));
+    setUpdatingDealIds((prev) => new Set(prev).add(item.dealId));
+    try {
+      const success = await dataService.updateDeal(item.dealId, { isFinished: true });
+      if (success) {
+        toast.success('已标记为完结');
+        await loadReminders();
+      } else {
+        toast.error('更新是否完结失败');
+        setFinishingDealIds((prev) => {
+          const next = new Set(prev);
+          next.delete(item.dealId);
+          return next;
+        });
+      }
+    } catch (error) {
+      console.error('更新是否完结失败:', error);
+      toast.error('更新是否完结失败');
+      setFinishingDealIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.dealId);
+        return next;
+      });
+    } finally {
+      setUpdatingDealIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.dealId);
         return next;
       });
     }
@@ -291,7 +416,7 @@ const RemindersTab: React.FC = () => {
                           <TableHead className="w-[80px]">项目阶段</TableHead>
                           <TableHead className="w-[90px]">最近更新</TableHead>
                           <TableHead className="w-[80px]">提醒状态</TableHead>
-                          <TableHead className="w-[80px]">操作</TableHead>
+                          <TableHead className="w-[160px]">操作</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -322,13 +447,43 @@ const RemindersTab: React.FC = () => {
                               {getReminderBadge(item.reminderLevel)}
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Checkbox
-                                  checked={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
-                                  onCheckedChange={() => handleConfirmFollowUp(item.projectId)}
-                                  disabled={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
-                                />
-                                <span className="text-xs text-muted-foreground">已跟进</span>
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Checkbox
+                                    checked={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
+                                    onCheckedChange={() => handleConfirmFollowUp(item.projectId)}
+                                    disabled={
+                                      Boolean(item.isFollowedUp) ||
+                                      confirmingIds.has(item.projectId) ||
+                                      updatingStageIds.has(item.projectId)
+                                    }
+                                  />
+                                  <span className="text-xs text-muted-foreground">已跟进</span>
+                                </div>
+                                {item.stage === '停滞' && (
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={() => handleUpdateStage(item.projectId, 'FA')}
+                                      disabled={updatingStageIds.has(item.projectId)}
+                                    >
+                                      FA
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={() => handleUpdateStage(item.projectId, '丢单')}
+                                      disabled={updatingStageIds.has(item.projectId)}
+                                    >
+                                      丢单
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -371,17 +526,43 @@ const RemindersTab: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-end mt-3 pt-3 border-t">
+                      <div className="flex flex-wrap items-center justify-end gap-2 mt-3 pt-3 border-t">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleConfirmFollowUp(item.projectId)}
-                          disabled={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
+                          disabled={
+                            Boolean(item.isFollowedUp) ||
+                            confirmingIds.has(item.projectId) ||
+                            updatingStageIds.has(item.projectId)
+                          }
                           className="h-8 text-xs"
                         >
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           确认已跟进
                         </Button>
+                        {item.stage === '停滞' && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleUpdateStage(item.projectId, 'FA')}
+                              disabled={updatingStageIds.has(item.projectId)}
+                              className="h-8 text-xs"
+                            >
+                              FA
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleUpdateStage(item.projectId, '丢单')}
+                              disabled={updatingStageIds.has(item.projectId)}
+                              className="h-8 text-xs"
+                            >
+                              丢单
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -431,29 +612,61 @@ const RemindersTab: React.FC = () => {
                               <UserProfileName name={item.bd || '-'} openId={item.bdOpenId} />
                             </TableCell>
                             <TableCell className="text-xs">
-                              <div>{formatDateSafe(item.projectEndDate) || '-'}</div>
-                              <div className={cn(
-                                item.daysUntilEnd < 0 ? 'text-destructive' :
-                                item.daysUntilEnd === 0 ? 'text-warning' : 'text-muted-foreground'
-                              )}>
-                                {item.daysUntilEnd < 0
-                                  ? `(已过期 ${Math.abs(item.daysUntilEnd)} 天)`
-                                  : item.daysUntilEnd === 0
-                                    ? '(今天到期)'
-                                    : `(还剩${item.daysUntilEnd}天)`}
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="date"
+                                    value={dealEndDateDrafts[item.dealId] ?? toInputDate(item.projectEndDate)}
+                                    onChange={(e) => handleEndDateChange(item.dealId, e.target.value)}
+                                    className="h-7 w-[140px] text-xs"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => handleSaveEndDate(item)}
+                                    disabled={updatingDealIds.has(item.dealId)}
+                                  >
+                                    保存
+                                  </Button>
+                                </div>
+                                <div className={cn(
+                                  item.daysUntilEnd < 0 ? 'text-destructive' :
+                                  item.daysUntilEnd === 0 ? 'text-warning' : 'text-muted-foreground'
+                                )}>
+                                  {item.daysUntilEnd < 0
+                                    ? `(已过期 ${Math.abs(item.daysUntilEnd)} 天)`
+                                    : item.daysUntilEnd === 0
+                                      ? '(今天到期)'
+                                      : `(还剩${item.daysUntilEnd}天)`}
+                                </div>
                               </div>
                             </TableCell>
                             <TableCell>
                               {getReminderBadge(item.reminderLevel)}
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Checkbox
-                                  checked={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
-                                  onCheckedChange={() => handleConfirmFollowUp(item.projectId)}
-                                  disabled={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
-                                />
-                                <span className="text-xs text-muted-foreground">已跟进</span>
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Checkbox
+                                    checked={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
+                                    onCheckedChange={() => handleConfirmFollowUp(item.projectId)}
+                                    disabled={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
+                                  />
+                                  <span className="text-xs text-muted-foreground">已跟进</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Checkbox
+                                    checked={finishingDealIds.has(item.dealId)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked !== true) return;
+                                      handleMarkDealFinished(item);
+                                    }}
+                                    disabled={updatingDealIds.has(item.dealId)}
+                                  />
+                                  <span className="text-xs text-muted-foreground">是否完结</span>
+                                </div>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -481,20 +694,48 @@ const RemindersTab: React.FC = () => {
 
                       <div className="flex items-center gap-2 mt-3 text-xs">
                         <Calendar className="h-3 w-3 text-muted-foreground" />
-                        <span>结束时间: {formatDateSafe(item.projectEndDate) || '-'}</span>
-                        <span className={cn(
-                          item.daysUntilEnd < 0 ? 'text-destructive' :
-                          item.daysUntilEnd === 0 ? 'text-warning' : 'text-muted-foreground'
-                        )}>
-                          {item.daysUntilEnd < 0
-                            ? `(已过期 ${Math.abs(item.daysUntilEnd)} 天)`
-                            : item.daysUntilEnd === 0
-                              ? '(今天到期)'
-                              : `(还剩${item.daysUntilEnd}天)`}
-                        </span>
+                        <span>结束时间:</span>
+                        <Input
+                          type="date"
+                          value={dealEndDateDrafts[item.dealId] ?? toInputDate(item.projectEndDate)}
+                          onChange={(e) => handleEndDateChange(item.dealId, e.target.value)}
+                          className="h-7 w-[140px] text-xs"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => handleSaveEndDate(item)}
+                          disabled={updatingDealIds.has(item.dealId)}
+                        >
+                          保存
+                        </Button>
+                      </div>
+                      <div className={cn(
+                        'mt-2 text-xs',
+                        item.daysUntilEnd < 0 ? 'text-destructive' :
+                        item.daysUntilEnd === 0 ? 'text-warning' : 'text-muted-foreground'
+                      )}>
+                        {item.daysUntilEnd < 0
+                          ? `(已过期 ${Math.abs(item.daysUntilEnd)} 天)`
+                          : item.daysUntilEnd === 0
+                            ? '(今天到期)'
+                            : `(还剩${item.daysUntilEnd}天)`}
                       </div>
 
-                      <div className="flex items-center justify-end mt-3 pt-3 border-t">
+                      <div className="flex flex-col gap-2 mt-3 pt-3 border-t">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={finishingDealIds.has(item.dealId)}
+                            onCheckedChange={(checked) => {
+                              if (checked !== true) return;
+                              handleMarkDealFinished(item);
+                            }}
+                            disabled={updatingDealIds.has(item.dealId)}
+                          />
+                          <span className="text-xs text-muted-foreground">是否完结</span>
+                        </div>
                         <Button
                           variant="outline"
                           size="sm"

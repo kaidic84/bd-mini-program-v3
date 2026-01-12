@@ -354,11 +354,11 @@ export const dataService = {
       }
       return true;
     } catch (e) {
-      console.error('[dataService] updateDeal via backend failed, fallback to mockDb:', e);
+      console.error('[dataService] updateDeal via backend failed:', e);
       if (USE_FEISHU_API) {
         return feishuBitableApi.updateDeal(dealId, data);
       }
-      return mockDb.updateDeal(dealId, data);
+      return false;
     }
   },
 

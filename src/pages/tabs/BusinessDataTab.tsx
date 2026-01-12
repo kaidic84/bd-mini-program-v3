@@ -17,14 +17,14 @@ const BusinessDataTab: React.FC = () => {
     },
     {
       key: "projects",
-      label: "业务",
-      description: "查看业务进度与详情",
+      label: "项目",
+      description: "查看项目进度与详情",
       icon: FolderKanban,
     },
     {
       key: "deals",
-      label: "数据",
-      description: "查看业务数据",
+      label: "立项",
+      description: "查看立项数据",
       icon: FileCheck,
     },
   ] as const;

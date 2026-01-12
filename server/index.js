@@ -2230,8 +2230,26 @@ app.post("/api/deals", async (req, res) => {
 
     const warnings = [];
 
+    const findFieldName = (name) => {
+      if (fieldNames.has(name)) return name;
+      const matched = Array.from(fieldNames).find((n) => String(n).includes(name));
+      return matched || null;
+    };
 
+    const toBoolMaybe = (value) => {
+      if (value === true || value === false) return value;
+      const s = String(value ?? "").trim().toLowerCase();
+      if (!s) return null;
+      if (["是", "true", "1", "yes", "y"].includes(s)) return true;
+      if (["否", "false", "0", "no", "n"].includes(s)) return false;
+      return null;
+    };
 
+    const toYesNoMaybe = (value) => {
+      if (value === true) return "是";
+      if (value === false) return "否";
+      return null;
+    };
     
 
     const setIf = (name, value) => {
@@ -2278,7 +2296,12 @@ app.post("/api/deals", async (req, res) => {
     setIf("项目结束时间", toUnixTs(body.endDate));
     setIf("归属", body.belong);
 
-    setIf("是否完结", body.isFinished);
+    const finishedFieldName = findFieldName("是否完结");
+    if (finishedFieldName) {
+      setIf(finishedFieldName, body.isFinished);
+    } else if (body.isFinished !== undefined && body.isFinished !== null) {
+      warnings.push("field not found: 是否完结");
+    }
 
     setIf("签约公司主体", body.signCompany);
 
@@ -2461,6 +2484,27 @@ app.put("/api/deals/:dealId", async (req, res) => {
     const fieldNames = new Set((items || []).map((f) => f.field_name));
 
     const warnings = [];
+    const findFieldName = (name) => {
+      if (fieldNames.has(name)) return name;
+      const matched = Array.from(fieldNames).find((n) => String(n).includes(name));
+      return matched || null;
+    };
+
+    const toBoolMaybe = (value) => {
+      if (value === true || value === false) return value;
+      const s = String(value ?? '').trim().toLowerCase();
+      if (!s) return null;
+      if (['是', 'true', '1', 'yes', 'y'].includes(s)) return true;
+      if (['否', 'false', '0', 'no', 'n'].includes(s)) return false;
+      return null;
+    };
+
+    const toYesNoMaybe = (value) => {
+      if (value === true) return '是';
+      if (value === false) return '否';
+      return null;
+    };
+
 
 
 
@@ -2508,7 +2552,12 @@ app.put("/api/deals/:dealId", async (req, res) => {
     setIf("项目结束时间", toUnixTs(body.endDate));
     setIf("归属", body.belong);
 
-    setIf("是否完结", body.isFinished);
+    const finishedFieldName = findFieldName("是否完结");
+    if (finishedFieldName) {
+      setIf(finishedFieldName, body.isFinished);
+    } else if (body.isFinished !== undefined && body.isFinished !== null) {
+      warnings.push("field not found: 是否完结");
+    }
 
     setIf("签约公司主体", body.signCompany);
 
@@ -2562,19 +2611,38 @@ app.put("/api/deals/:dealId", async (req, res) => {
 
 
 
-    const data = await updateRecord({
+    let data;
+    try {
+      data = await updateRecord({
+        appToken: DEAL_APP_TOKEN,
+        tableId: DEAL_TABLE_ID,
+        recordId,
+        fields,
+      });
+    } catch (e) {
+      if (finishedFieldName) {
+        const altValue =
+          typeof body.isFinished === "boolean"
+            ? toYesNoMaybe(body.isFinished)
+            : toBoolMaybe(body.isFinished);
+        if (altValue !== null && altValue !== undefined) {
+          const retryFields = { ...fields, [finishedFieldName]: altValue };
+          data = await updateRecord({
+            appToken: DEAL_APP_TOKEN,
+            tableId: DEAL_TABLE_ID,
+            recordId,
+            fields: retryFields,
+          });
+          fields[finishedFieldName] = altValue;
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
+      }
+    }
 
-      appToken: DEAL_APP_TOKEN,
-
-      tableId: DEAL_TABLE_ID,
-
-      recordId,
-
-      fields,
-
-    });
-
-
+    apiCache.delete("deals:all");
 
     return res.json({ success: true, record_id: recordId, data, fields, warnings });
 
