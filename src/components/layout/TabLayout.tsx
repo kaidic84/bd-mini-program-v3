@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   NavLink,
   Routes,
@@ -15,8 +15,6 @@ import {
   Database,
   LayoutGrid,
   LogOut,
-  Menu,
-  X,
 } from "lucide-react";
 
 // Tab 页面组件
@@ -53,7 +51,10 @@ const tabs: TabItem[] = [
 const TabLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const todayLabel = new Date().toLocaleDateString("zh-CN", {
+    month: "long",
+    day: "numeric",
+  });
 
   const handleLogout = () => {
     logout();
@@ -61,115 +62,154 @@ const TabLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header - 飞书小程序风格 */}
-      <header className="sticky top-0 z-50 border-b border-border bg-card">
-        <div className="flex h-14 items-center justify-between px-4">
-          {/* Logo & Title */}
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span className="text-sm font-bold text-primary-foreground">
-                BD
-              </span>
+    <div className="miniapp-shell">
+      <div className="pointer-events-none absolute inset-0 miniapp-bg" aria-hidden />
+      <div className="pointer-events-none miniapp-orb miniapp-orb-warm" aria-hidden />
+      <div className="pointer-events-none miniapp-orb miniapp-orb-cool" aria-hidden />
+
+      <header className="sticky top-0 z-40">
+        <div className="mx-auto max-w-6xl px-4 pt-4">
+          <div className="miniapp-topbar">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-[0_12px_30px_-18px_rgba(255,178,82,0.9)]">
+                <span className="text-sm font-bold">BD</span>
+              </div>
+              <div className="flex flex-col leading-tight">
+                <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                  Daily Flow
+                </span>
+                <span className="font-display text-sm text-foreground">BD 日常小程序</span>
+              </div>
             </div>
-            <span className="font-semibold text-foreground">BD 日常小程序</span>
-          </div>
-
-          {/* User Info & Logout */}
-          <div className="flex items-center gap-2">
-            <span className="hidden text-sm text-muted-foreground sm:block">
-              {user?.name}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              className="hidden sm:flex"
-            >
-              <LogOut className="mr-1 h-4 w-4" />
-              退出
-            </Button>
-
-            {/* Mobile menu button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="sm:hidden"
-              onClick={() => setMobileMenuOpen((v) => !v)}
-            >
-              {mobileMenuOpen ? (
-                <X className="h-5 w-5" />
-              ) : (
-                <Menu className="h-5 w-5" />
-              )}
-            </Button>
+            <div className="flex items-center gap-3">
+              <div className="hidden text-right text-xs text-muted-foreground sm:block">
+                <div>{user?.name || "-"}</div>
+                <div className="text-[10px] text-muted-foreground">{todayLabel}</div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                className="text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
-
-        {/* Mobile Dropdown Menu */}
-        {mobileMenuOpen && (
-          <div className="border-t border-border bg-card p-4 sm:hidden">
-            <div className="mb-2 text-sm text-muted-foreground">
-              {user?.name}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              className="w-full justify-start"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              退出登录
-            </Button>
-          </div>
-        )}
-
-        {/* Tab Navigation - 顶部 Tab 栏（基于路由高亮） */}
-        <nav className="flex overflow-x-auto border-t border-border bg-background">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <NavLink
-                key={tab.key}
-                to={tab.key} // 相对路径：/app/clients, /app/projects ...
-                className={({ isActive }) =>
-                  cn(
-                    "flex flex-1 min-w-[80px] flex-col items-center justify-center gap-1 py-3 px-2 text-xs font-medium transition-colors border-b-2",
-                    isActive
-                      ? "border-primary text-primary bg-primary/5"
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  )
-                }
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <Icon className="h-5 w-5" />
-                <span className="whitespace-nowrap">{tab.label}</span>
-              </NavLink>
-            );
-          })}
-        </nav>
       </header>
 
-      {/* Main Content：根据 /app/* 子路径渲染不同 Tab */}
-      <main className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <Routes>
-            {/* 默认访问 /app 时，跳到 /app/business */}
-            <Route path="/" element={<Navigate to="business" replace />} />
+      <main className="relative z-10 flex-1 pb-28">
+        <div className="mx-auto max-w-6xl px-4 pb-10 pt-4">
+          <div className="miniapp-stagger space-y-6">
+            <section className="relative overflow-hidden rounded-[28px] border border-border/60 bg-black/50 p-6 text-foreground shadow-[0_35px_70px_-50px_rgba(0,0,0,0.9)] backdrop-blur">
+              <div className="pointer-events-none absolute -right-16 -top-12 h-56 w-56 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(255,199,132,0.8),transparent_70%)] opacity-70" />
+              <div className="pointer-events-none absolute -bottom-24 -left-10 h-52 w-52 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(122,196,255,0.55),transparent_70%)] opacity-60" />
+              <div className="relative z-10 flex flex-col gap-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                  <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_14px_rgba(255,185,90,0.7)]" />
+                  欢迎回来
+                </div>
+                <div className="space-y-1">
+                  <div className="text-sm text-muted-foreground">您好，{user?.name || "伙伴"}</div>
+                  <h1 className="font-display text-3xl sm:text-4xl">BD 日常小程序</h1>
+                  <p className="text-sm text-muted-foreground">项目更新、立项进度、提醒同步，一屏掌控。</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="miniapp-chip">每日 10:00 提醒</span>
+                  <span className="miniapp-chip">飞书同步</span>
+                  <span className="miniapp-chip">移动优先</span>
+                </div>
+              </div>
 
-            <Route path="business" element={<BusinessDataTab />} />
-            <Route path="kanban" element={<KanbanTab />} />
-            <Route path="clients" element={<ClientsTab />} />
-            <Route path="projects" element={<ProjectsTab />} />
-            <Route path="deals" element={<DealsTab />} />
-            <Route path="daily" element={<DailyFormTab />} />
-            <Route path="reminders" element={<RemindersTab />} />
+              <div className="relative z-10 mt-6 grid gap-3 lg:grid-cols-2">
+                <div className="miniapp-scorecard">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>今日概览</span>
+                    <span>{todayLabel}</span>
+                  </div>
+                  <div className="mt-2 text-lg font-semibold">保持更新节奏</div>
+                  <div className="mt-3 grid grid-cols-3 gap-3 text-xs text-muted-foreground">
+                    <div>
+                      <div className="text-base font-semibold text-foreground">{tabs.length}</div>
+                      <div>核心模块</div>
+                    </div>
+                    <div>
+                      <div className="text-base font-semibold text-foreground">10:00</div>
+                      <div>提醒发送</div>
+                    </div>
+                    <div>
+                      <div className="text-base font-semibold text-foreground">实时</div>
+                      <div>数据同步</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="miniapp-scorecard">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>快捷入口</span>
+                    <span>常用</span>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <NavLink to="daily" className="miniapp-quick">
+                      <ClipboardList className="h-4 w-4 text-primary" />
+                      <div>
+                        <div className="text-sm font-semibold">每日表单</div>
+                        <div className="text-xs text-muted-foreground">新增与更新项目</div>
+                      </div>
+                    </NavLink>
+                    <NavLink to="reminders" className="miniapp-quick">
+                      <Bell className="h-4 w-4 text-primary" />
+                      <div>
+                        <div className="text-sm font-semibold">提醒预览</div>
+                        <div className="text-xs text-muted-foreground">跟进与完结提醒</div>
+                      </div>
+                    </NavLink>
+                  </div>
+                </div>
+              </div>
+            </section>
 
-            {/* 兜底：任何未知子路径都跳回客户 Tab */}
-            <Route path="*" element={<Navigate to="clients" replace />} />
-          </Routes>
+            <section className="relative">
+              <Routes>
+                {/* 默认访问 /app 时，跳到 /app/business */}
+                <Route path="/" element={<Navigate to="business" replace />} />
+
+                <Route path="business" element={<BusinessDataTab />} />
+                <Route path="kanban" element={<KanbanTab />} />
+                <Route path="clients" element={<ClientsTab />} />
+                <Route path="projects" element={<ProjectsTab />} />
+                <Route path="deals" element={<DealsTab />} />
+                <Route path="daily" element={<DailyFormTab />} />
+                <Route path="reminders" element={<RemindersTab />} />
+
+                {/* 兜底：任何未知子路径都跳回客户 Tab */}
+                <Route path="*" element={<Navigate to="clients" replace />} />
+              </Routes>
+            </section>
+          </div>
         </div>
       </main>
+
+      <nav className="miniapp-tabbar">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <NavLink
+              key={tab.key}
+              to={tab.key}
+              className={({ isActive }) =>
+                cn(
+                  "miniapp-tab",
+                  isActive ? "miniapp-tab-active" : "hover:text-foreground hover:bg-foreground/10"
+                )
+              }
+            >
+              <Icon className="h-5 w-5" />
+              <span className="whitespace-nowrap">{tab.label}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
     </div>
   );
 };

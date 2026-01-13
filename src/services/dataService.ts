@@ -126,6 +126,7 @@ export const dataService = {
       const payload = {
         shortName: data.shortName,
         companyName: data.companyName,
+        leadMonth: (data.leadMonth || "").trim(),
         hq: data.hq || '',
         customerType: (data.customerType || '').trim(),
         level: (data.level || '').trim(),
@@ -152,6 +153,7 @@ export const dataService = {
         id: recordId || Date.now().toString(),
         shortName: data.shortName,
         companyName: data.companyName,
+        leadMonth: data.leadMonth || "",
         customerType: data.customerType,
         level: data.level || '',
         cooperationStatus: data.cooperationStatus || '',

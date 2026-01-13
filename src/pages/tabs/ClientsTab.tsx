@@ -33,6 +33,13 @@ import { formatDateSafe } from "@/lib/date";
 function pickSingleName(v: any): string {
   if (!v) return "";
   if (typeof v === "string") return v.trim();
+  if (Array.isArray(v)) {
+    if (v.length === 0) return "";
+    const first = v[0];
+    if (typeof first === "string") return first.trim();
+    if (typeof first === "object" && first?.name) return String(first.name).trim();
+    return String(first ?? "").trim();
+  }
   if (typeof v === "object" && v.name) return String(v.name).trim();
   return "";
 }
@@ -64,6 +71,7 @@ export function feishuToClient(c: any): Client {
   const id = c?.record_id || c?.id || fields?.["客户ID"] || "";
   const shortName = fields?.["客户/部门简称"] || fields?.["客户简称"] || c?.shortName || "";
   const companyName = fields?.["企业名称"] || fields?.["公司名称"] || c?.companyName || "";
+  const leadMonth = pickSingleName(fields?.["线索月份"]) || pickSingleName(c?.leadMonth) || "";
 
   const hq = fields?.["公司总部地区"] || c?.hq || c?.hqRegion || "";
 
@@ -105,6 +113,7 @@ export function feishuToClient(c: any): Client {
     id: String(id || ""),
     shortName: String(shortName || ""),
     companyName: String(companyName || ""),
+    leadMonth: String(leadMonth || ""),
     customerType: String(customerType || "其他"),
 
     level,

@@ -316,6 +316,17 @@ let cachedFieldMap = null;
 
 let cachedFieldMapExpireAt = 0;
 
+let cachedFieldInfoMap = null;
+
+let cachedFieldInfoExpireAt = 0;
+
+const normalizeFieldName = (value) => String(value || "").replace(/\s+/g, "");
+const normalizeOptionValue = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[./]/g, "-");
+
 
 
 async function getFieldMap(appToken, tableId) {
@@ -357,20 +368,62 @@ function findFieldId(fieldMap, expectedName) {
 
 
   // 2) 容错：忽略所有空白字符再匹配（解?“公司总部 地区?这种?
-  const norm = (s) => String(s || "").replace(/\s+/g, "");
-
-  const target = norm(expectedName);
+  const target = normalizeFieldName(expectedName);
 
 
 
   for (const [name, id] of fieldMap.entries()) {
 
-    if (norm(name) === target) return id;
+    if (normalizeFieldName(name) === target) return id;
 
   }
 
   return null;
 
+}
+
+async function getFieldInfoMap(appToken, tableId) {
+  const now = Date.now();
+  if (cachedFieldInfoMap && now < cachedFieldInfoExpireAt) return cachedFieldInfoMap;
+
+  const items = await listFields({ appToken, tableId });
+  const map = new Map(); // normalized field_name -> { name, type }
+  (items || []).forEach((f) => {
+    if (!f?.field_name) return;
+    map.set(normalizeFieldName(f.field_name), {
+      name: f.field_name,
+      type: f.type,
+      options: Array.isArray(f?.property?.options) ? f.property.options : [],
+    });
+  });
+
+  cachedFieldInfoMap = map;
+  cachedFieldInfoExpireAt = now + 60 * 1000;
+  return map;
+}
+
+async function resolveFieldInfo(appToken, tableId, expectedName) {
+  const infoMap = await getFieldInfoMap(appToken, tableId);
+  const info = infoMap.get(normalizeFieldName(expectedName));
+  return info || { name: expectedName, type: null };
+}
+
+function toSelectValue(value, fieldType) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  // 4 = multi-select in Feishu Bitable
+  if (fieldType === 4) return [trimmed];
+  return trimmed;
+}
+
+function resolveSelectOptionName(fieldInfo, inputValue) {
+  const raw = String(inputValue || "").trim();
+  if (!raw) return "";
+  const options = Array.isArray(fieldInfo?.options) ? fieldInfo.options : [];
+  if (options.length === 0) return raw;
+  const target = normalizeOptionValue(raw);
+  const match = options.find((opt) => normalizeOptionValue(opt?.name) === target);
+  return match?.name || raw;
 }
 
 
@@ -552,6 +605,10 @@ app.post("/api/customers", async (req, res) => {
     const shortName = String(body.shortName || body.name || "").trim();
 
     const companyName = String(body.companyName || "").trim();
+    const leadMonth = String(body.leadMonth || "").trim();
+    const leadMonthInfo = leadMonth
+      ? await resolveFieldInfo(appToken, tableId, "线索月份")
+      : null;
 
 
 
@@ -568,6 +625,12 @@ app.post("/api/customers", async (req, res) => {
     };
 
     if (companyName) fields["企业名称"] = companyName;
+    if (leadMonth && leadMonthInfo) {
+      const leadOption = resolveSelectOptionName(leadMonthInfo, leadMonth);
+      const leadValue = toSelectValue(leadOption, leadMonthInfo.type);
+      const hasValue = Array.isArray(leadValue) ? leadValue.length > 0 : Boolean(leadValue);
+      if (hasValue) fields[leadMonthInfo.name] = leadValue;
+    }
 
     const hq = String(body.hq || "").trim();
     if (hq) fields["公司总部地区"] = hq;
@@ -767,6 +830,14 @@ app.put("/api/customers/:customerId", async (req, res) => {
     setIf("客户/部门简称", String(body.shortName || "").trim());
 
     setIf("企业名称", String(body.companyName || "").trim());
+    const leadMonth = String(body.leadMonth || "").trim();
+    if (leadMonth) {
+      const leadMonthInfo = await resolveFieldInfo(appToken, tableId, "线索月份");
+      const leadOption = resolveSelectOptionName(leadMonthInfo, leadMonth);
+      const leadValue = toSelectValue(leadOption, leadMonthInfo.type);
+      const hasValue = Array.isArray(leadValue) ? leadValue.length > 0 : Boolean(leadValue);
+      if (hasValue) fields[leadMonthInfo.name] = leadValue;
+    }
 
     setIf("公司总部地区", String(body.hq || "").trim());
 

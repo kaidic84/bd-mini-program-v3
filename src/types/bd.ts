@@ -11,6 +11,7 @@ export interface Client {
   id: string;                // 内部ID
   shortName: string;         // 客户/部门简称
   companyName: string;       // 企业名称
+  leadMonth?: string;        // 线索月份
   customerType: string;      // 客户类型（单选 name）
 
   level?: string;            // 客户等级（单选）
@@ -245,7 +246,7 @@ export { BD_OPTIONS } from '@/config/bdOptions';
 export { AM_OPTIONS } from '@/config/bdOptions';
 
 /* 时间 */
-export { MONTH_OPTIONS } from '@/config/bdOptions';
+export { MONTH_OPTIONS, LEAD_MONTH_OPTIONS } from '@/config/bdOptions';
 export { CONTRACT_ENTITIES, COMPLETION_STATUS } from '@/config/bdOptions';
 export interface DailyFormProjectEntry {
   projectId: string;

@@ -241,9 +241,15 @@ const RemindersTab: React.FC = () => {
     setFinishingDealIds((prev) => new Set(prev).add(item.dealId));
     setUpdatingDealIds((prev) => new Set(prev).add(item.dealId));
     try {
-      const success = await dataService.updateDeal(item.dealId, { isFinished: true });
+      const success = await dataService.updateDeal(item.dealId, { isFinished: '是' });
       if (success) {
         toast.success('已标记为完结');
+        setFinishedReminders((prev) => prev.filter((reminder) => reminder.dealId !== item.dealId));
+        setFinishingDealIds((prev) => {
+          const next = new Set(prev);
+          next.delete(item.dealId);
+          return next;
+        });
         await loadReminders();
       } else {
         toast.error('更新是否完结失败');

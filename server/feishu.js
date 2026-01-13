@@ -135,6 +135,19 @@ export async function getCustomers({ keyword } = {}) {
     pageSize: 200,
   });
 
+  const pickSelectValue = (value) => {
+    if (!value) return "";
+    if (Array.isArray(value)) {
+      if (value.length === 0) return "";
+      const first = value[0];
+      if (typeof first === "string") return first;
+      if (typeof first === "object" && first?.name) return String(first.name);
+      return String(first ?? "");
+    }
+    if (typeof value === "object" && value?.name) return String(value.name);
+    return String(value);
+  };
+
   const customers = items.map((it) => {
     const f = it.fields || {};
 
@@ -143,6 +156,7 @@ export async function getCustomers({ keyword } = {}) {
 
       shortName: f["客户/部门简称"] || "",
       companyName: f["企业名称"] || "",
+      leadMonth: pickSelectValue(f["线索月份"]),
       hq: f["公司总部地区"] || "",
 
       customerType: f["客户类型"] || "",
@@ -259,7 +273,7 @@ export async function deleteRecords({ appToken, tableId, recordIds }) {
   const json = await feishuFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ record_ids: recordIds }),
+    body: JSON.stringify({ records: recordIds }),
   });
 
   return json.data;
@@ -327,6 +341,5 @@ export async function getRecordById({ appToken, tableId, recordId }) {
   if (json.code !== 0) {
     throw new Error(`getRecordById failed: ${JSON.stringify(json)}`);
   }
-  return json.data;
+  return json.data?.record ?? json.data;
 }
-

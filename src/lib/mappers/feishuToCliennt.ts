@@ -37,8 +37,22 @@ export function feishuToClient(raw: any): Client {
     "";
 
   // 单选字段：可能是 string，也可能是 { name: "xxx" }
-  const pickSingle = (v: any) =>
-    typeof v === "object" && v !== null ? (v?.name ?? "") : (v ?? "");
+  const pickSingle = (v: any) => {
+    if (Array.isArray(v)) {
+      if (v.length === 0) return "";
+      const first = v[0];
+      if (typeof first === "string") return first;
+      if (typeof first === "object" && first?.name) return String(first.name);
+      return String(first ?? "");
+    }
+    if (typeof v === "object" && v !== null) return v?.name ?? "";
+    return v ?? "";
+  };
+
+  const leadMonth =
+    pickSingle(fields?.["线索月份"]) ||
+    fields?.leadMonth ||
+    "";
 
   const customerType =
     pickSingle(fields?.["客户类型"]) ||
@@ -83,6 +97,7 @@ export function feishuToClient(raw: any): Client {
     id,
     shortName,
     companyName,
+    leadMonth,
     hq,
     customerType,
     level,

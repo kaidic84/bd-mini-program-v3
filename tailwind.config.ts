@@ -15,6 +15,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Noto Sans SC', 'sans-serif'],
+        display: ['Noto Serif SC', 'serif'],
       },
       colors: {
         border: "hsl(var(--border))",

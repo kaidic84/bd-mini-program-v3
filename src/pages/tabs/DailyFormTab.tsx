@@ -11,6 +11,7 @@ import {
   CUSTOMER_TYPE_OPTIONS,
   INDUSTRY_OPTIONS,
   MONTH_OPTIONS,
+  LEAD_MONTH_OPTIONS,
   PROJECT_PRIORITY_OPTIONS,
   PROJECT_STAGE_OPTIONS,
   PROJECT_TYPE_OPTIONS,
@@ -34,6 +35,7 @@ type NewClientDraft = {
   localId: string;
   shortName: string;
   companyName: string;
+  leadMonth: string;
   customerType: string;
   level: string;
   industry: string;
@@ -107,6 +109,7 @@ const makeEmptyNewClient = (): NewClientDraft => ({
   localId: makeLocalId(),
   shortName: "",
   companyName: "",
+  leadMonth: "",
   customerType: "",
   level: "",
   industry: "",
@@ -126,6 +129,7 @@ const validateNewClient = (c: NewClientDraft) =>
 const isNewClientBlank = (c: NewClientDraft) =>
   isBlank(c.shortName) &&
   isBlank(c.companyName) &&
+  isBlank(c.leadMonth) &&
   isBlank(c.customerType) &&
   isBlank(c.level) &&
   isBlank(c.industry) &&
@@ -140,6 +144,7 @@ const clientToUpdateDraft = (client: Client): UpdateClientDraft => {
     customerId,
     shortName: String((client as any).shortName || "").trim(),
     companyName: String((client as any).companyName || "").trim(),
+    leadMonth: String((client as any).leadMonth || "").trim(),
     customerType: String((client as any).customerType || "").trim(),
     level: String((client as any).level || (client as any).customerLevel || "").trim(),
     industry: String((client as any).industry || "").trim(),
@@ -564,6 +569,7 @@ export default function DailyFormTab() {
             await dataService.createClient({
               shortName: c.shortName.trim(),
               companyName: c.companyName.trim(),
+              leadMonth: c.leadMonth.trim(),
               customerType: c.customerType.trim(),
               level: c.level.trim(),
               cooperationStatus: "潜在",
@@ -786,8 +792,17 @@ export default function DailyFormTab() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>公司名称 *</Label>
+                    <Label>企业名称 *</Label>
                     <Input value={newClientDraft.companyName} onChange={(e) => setNewClientDraft({ ...newClientDraft, companyName: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>线索月份</Label>
+                    <OptionSelect
+                      value={newClientDraft.leadMonth}
+                      onValueChange={(v) => setNewClientDraft({ ...newClientDraft, leadMonth: v })}
+                      placeholder="选择线索月份"
+                      options={LEAD_MONTH_OPTIONS}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>客户类型 *</Label>
@@ -852,7 +867,7 @@ export default function DailyFormTab() {
                   <Input
                     value={clientSearchKeyword}
                     onChange={(e) => setClientSearchKeyword(e.target.value)}
-                    placeholder="输入客户简称/公司名称"
+                    placeholder="输入客户简称/企业名称"
                   />
                   <SearchList
                     items={clientSearchResults.map((c: any) => ({
@@ -914,10 +929,19 @@ export default function DailyFormTab() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>公司名称 *</Label>
+                        <Label>企业名称 *</Label>
                         <Input
                           value={updateClientDraft.companyName}
                           onChange={(e) => setUpdateClientDraft({ ...updateClientDraft, companyName: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>线索月份</Label>
+                        <OptionSelect
+                          value={updateClientDraft.leadMonth}
+                          onValueChange={(v) => setUpdateClientDraft({ ...updateClientDraft, leadMonth: v })}
+                          placeholder="选择线索月份"
+                          options={LEAD_MONTH_OPTIONS}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1057,7 +1081,7 @@ export default function DailyFormTab() {
                   <Input
                     value={newProjectCustomerKeyword}
                     onChange={(e) => setNewProjectCustomerKeyword(e.target.value)}
-                    placeholder="输入客户简称/公司名称"
+                    placeholder="输入客户简称/企业名称"
                   />
                   <SearchList
                     items={newProjectCustomerResults.map((c: any) => ({
