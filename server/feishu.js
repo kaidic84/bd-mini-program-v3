@@ -124,6 +124,44 @@ export async function listRecords({
   return json.data?.items || [];
 }
 
+const formatDateLoose = (v) => {
+  if (v === null || v === undefined) return "";
+  const str = String(v).trim();
+  if (!str || str === "0") return "";
+
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const formatLocal = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const formatUtc = (d) => `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+
+  const num = Number(str);
+  const isNum = !Number.isNaN(num);
+  if (isNum) {
+    const isMs = str.length >= 13 || num > 1e11;
+    const isSec = str.length === 10 || (num >= 1e9 && num < 2e10);
+    const isExcelSerial = num > 20000 && num < 60000;
+
+    if (isMs || isSec) {
+      const d = new Date(isMs ? num : num * 1000);
+      if (!Number.isNaN(d.getTime())) return formatLocal(d);
+    }
+
+    if (isExcelSerial) {
+      const base = Date.UTC(1899, 11, 30);
+      const d = new Date(base + num * 24 * 60 * 60 * 1000);
+      if (!Number.isNaN(d.getTime())) return formatUtc(d);
+    }
+
+    return str;
+  }
+
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(str)) {
+    const [y, m, d] = str.replace(/\//g, "-").split("-");
+    return `${y}-${pad2(m)}-${pad2(d)}`;
+  }
+
+  return str;
+};
+
 /**
  * 你现有的 customers 映射（保持你原来的字段）
  * keyword：前端传来用于搜索
@@ -150,6 +188,14 @@ export async function getCustomers({ keyword } = {}) {
 
   const customers = items.map((it) => {
     const f = it.fields || {};
+    const createdAtRaw =
+      f["创建时间"] ??
+      f["创建日期"] ??
+      f["记录创建时间"] ??
+      f.createdAt ??
+      it.created_time ??
+      it.createdTime ??
+      "";
 
     return {
       id: f["客户ID"] ?? it.record_id,
@@ -178,6 +224,7 @@ export async function getCustomers({ keyword } = {}) {
             f["项目进度数据表1-客户ID"][0]
           ? f["项目进度数据表1-客户ID"][0].text_arr || []
           : [],
+      createdAt: formatDateLoose(createdAtRaw),
     };
   });
 

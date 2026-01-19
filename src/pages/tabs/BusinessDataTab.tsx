@@ -36,7 +36,7 @@ const BusinessDataTab: React.FC = () => {
           <CardTitle>业务数据</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          请选择要查看的业务数据类型。
+          请选择要查看的业务数据类型
         </CardContent>
       </Card>
 

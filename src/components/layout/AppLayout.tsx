@@ -42,8 +42,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-8">
             <Link to="/customers" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <span className="text-sm font-bold text-primary-foreground">BD</span>
+              <div className="flex h-8 items-center justify-center rounded-lg bg-primary px-2">
+                <span className="text-xs font-bold text-primary-foreground">AI策略</span>
               </div>
               <span className="hidden font-semibold text-foreground sm:block">
                 每日表单系统

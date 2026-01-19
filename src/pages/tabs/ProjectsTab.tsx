@@ -258,10 +258,10 @@ const ProjectsTab: React.FC = () => {
 
               <Select value={bdFilter} onValueChange={setBdFilter}>
                 <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="BD" />
+                  <SelectValue placeholder="AI策略" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">全部BD</SelectItem>
+                  <SelectItem value="all">全部AI策略</SelectItem>
                   {BD_OPTIONS.map((bd) => (
                     <SelectItem key={bd} value={bd}>
                       {bd}
@@ -338,7 +338,7 @@ const ProjectsTab: React.FC = () => {
 
               <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
                 <span>
-                  BD: <UserProfileName name={project.bd || '-'} openId={project.bdOpenId} />
+                  AI策略: <UserProfileName name={project.bd || '-'} openId={project.bdOpenId} />
                   <span className="ml-2">AM: {project.am || '-'}</span>
                 </span>
                 <span className="flex items-center gap-1">
@@ -430,7 +430,7 @@ const ProjectsTab: React.FC = () => {
                         <span>{selectedProject.deliverableName || '-'}</span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">BD：</span>
+                        <span className="text-muted-foreground">AI策略：</span>
                         <span>{selectedProject.bd || '-'}</span>
                       </div>
                       <div>

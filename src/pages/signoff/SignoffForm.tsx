@@ -159,7 +159,7 @@ const SignoffForm: React.FC = () => {
                 <span className="font-medium">¥{project.estimatedAmount.toLocaleString()}</span>
               </div>
               <div>
-                <span className="text-muted-foreground">BD：</span>
+                <span className="text-muted-foreground">AI策略：</span>
                 <span className="font-medium">{project.bd}</span>
               </div>
             </div>

@@ -25,6 +25,8 @@ export interface Client {
   ownerOpenId?: string;      // openId for UserProfile
 
   relatedProjectIds?: string[]; // ✅ 展示用：关联项目
+  createdAt?: string;
+  updatedAt?: string;
 
   /** 🧯 兼容旧代码（DailyFormTab / dataService 可能在用） */
   customerId?: string;       // alias -> id

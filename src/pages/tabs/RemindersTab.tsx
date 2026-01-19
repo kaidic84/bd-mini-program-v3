@@ -280,19 +280,28 @@ const RemindersTab: React.FC = () => {
     switch (level) {
       case 'red':
         return (
-          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-xs">
+          <Badge
+            variant="outline"
+            className="whitespace-nowrap bg-destructive/10 text-destructive border-destructive/30 text-xs"
+          >
             红色提醒
           </Badge>
         );
       case 'yellow':
         return (
-          <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-xs">
+          <Badge
+            variant="outline"
+            className="whitespace-nowrap bg-warning/10 text-warning border-warning/30 text-xs"
+          >
             黄色提醒
           </Badge>
         );
       default:
         return (
-          <Badge variant="outline" className="bg-muted text-muted-foreground border-muted-foreground/30 text-xs">
+          <Badge
+            variant="outline"
+            className="whitespace-nowrap bg-muted text-muted-foreground border-muted-foreground/30 text-xs"
+          >
             普通提醒
           </Badge>
         );
@@ -345,7 +354,7 @@ const RemindersTab: React.FC = () => {
             提醒预览
           </CardTitle>
           <CardDescription>
-            系统将在每日早上 10:00 向 BD 发送汇总提醒通知
+            系统将在每日早上 10:00 向 AI策略 发送汇总提醒通知
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
@@ -417,11 +426,11 @@ const RemindersTab: React.FC = () => {
                         <TableRow>
                           <TableHead className="w-[200px]">项目名称</TableHead>
                           <TableHead className="w-[80px]">客户</TableHead>
-                          <TableHead className="w-[60px]">BD</TableHead>
-                          <TableHead className="w-[70px]">项目类别</TableHead>
-                          <TableHead className="w-[80px]">项目阶段</TableHead>
+                          <TableHead className="w-[80px]">AI策略</TableHead>
+                          <TableHead className="w-[120px]">项目类别</TableHead>
+                          <TableHead className="w-[110px]">项目阶段</TableHead>
                           <TableHead className="w-[90px]">最近更新</TableHead>
-                          <TableHead className="w-[80px]">提醒状态</TableHead>
+                          <TableHead className="w-[120px]">提醒状态</TableHead>
                           <TableHead className="w-[160px]">操作</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -436,12 +445,18 @@ const RemindersTab: React.FC = () => {
                               <UserProfileName name={item.bd || '-'} openId={item.bdOpenId} />
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline" className={cn('text-xs', getProjectTypeBadgeClass(item.projectType))}>
+                              <Badge
+                                variant="outline"
+                                className={cn('text-xs whitespace-nowrap', getProjectTypeBadgeClass(item.projectType))}
+                              >
                                 {item.projectType}
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline" className={cn('text-xs', getStageBadgeClass(item.stage))}>
+                              <Badge
+                                variant="outline"
+                                className={cn('text-xs whitespace-nowrap', getStageBadgeClass(item.stage))}
+                              >
                                 {item.stage}
                               </Badge>
                             </TableCell>
@@ -516,10 +531,16 @@ const RemindersTab: React.FC = () => {
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-2">
-                        <Badge variant="outline" className={cn('text-xs', getProjectTypeBadgeClass(item.projectType))}>
+                        <Badge
+                          variant="outline"
+                          className={cn('text-xs whitespace-nowrap', getProjectTypeBadgeClass(item.projectType))}
+                        >
                           {item.projectType}
                         </Badge>
-                        <Badge variant="outline" className={cn('text-xs', getStageBadgeClass(item.stage))}>
+                        <Badge
+                          variant="outline"
+                          className={cn('text-xs whitespace-nowrap', getStageBadgeClass(item.stage))}
+                        >
                           {item.stage}
                         </Badge>
                       </div>
@@ -586,7 +607,7 @@ const RemindersTab: React.FC = () => {
                 <div className="flex flex-col items-center gap-2 text-muted-foreground">
                   <CheckCircle2 className="h-12 w-12 opacity-30" />
                   <p>暂无需要提醒的已立项项目</p>
-                  <p className="text-sm">所有项目结束时间都在 7 天以后</p>
+                  <p className="text-sm">所有项目结束时间都在 7 天后</p>
                 </div>
               </CardContent>
             </Card>
@@ -601,9 +622,9 @@ const RemindersTab: React.FC = () => {
                         <TableRow>
                           <TableHead className="w-[200px]">项目名称</TableHead>
                           <TableHead className="w-[80px]">客户</TableHead>
-                          <TableHead className="w-[60px]">BD</TableHead>
+                          <TableHead className="w-[80px]">AI策略</TableHead>
                           <TableHead className="w-[100px]">项目结束时间</TableHead>
-                          <TableHead className="w-[80px]">提醒状态</TableHead>
+                          <TableHead className="w-[120px]">提醒状态</TableHead>
                           <TableHead className="w-[80px]">操作</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -852,7 +873,7 @@ const RemindersTab: React.FC = () => {
                 </ul>
               </div>
             </div>
-            <p className="mt-3">📢 <strong>飞书通知：</strong>系统将在每日早上 10:00 向各 BD 发送汇总提醒（当前为模拟功能）</p>
+            <p className="mt-3">📢 <strong>飞书通知：</strong>系统将在每日早上 10:00 向各 AI策略 发送汇总提醒（当前为模拟功能）</p>
           </div>
         </CardContent>
       </Card>

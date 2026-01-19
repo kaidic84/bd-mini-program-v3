@@ -44,8 +44,12 @@ const Login: React.FC = () => {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-md animate-fade-in">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary">
-            <span className="text-2xl font-bold text-primary-foreground">BD</span>
+          <div className="mx-auto mb-4 flex h-16 items-center justify-center">
+            <img
+              src="/brand-logo-login.png"
+              alt="橙果视界"
+              className="h-16 w-auto max-w-[220px] object-contain"
+            />
           </div>
           <h1 className="text-2xl font-bold text-foreground">每日表单系统</h1>
           <p className="mt-2 text-muted-foreground">Business Development Daily Form System</p>
@@ -119,7 +123,7 @@ const Login: React.FC = () => {
             </form>
             <div className="mt-6 rounded-lg bg-muted p-4">
               <p className="text-center text-sm text-muted-foreground">
-                当前仅允许指定 BD 账号登录
+                当前仅允许指定AI策略账号登录
               </p>
             </div>
           </CardContent>

@@ -173,9 +173,11 @@ app.get("/api/notify/daily", async (req, res) => {
     console.log("notify daily", { isCron, query: req.query });
     if (CRON_SECRET) {
       const header = String(req.headers.authorization || "");
-      const token = header.toLowerCase().startsWith("bearer ")
+      const headerToken = header.toLowerCase().startsWith("bearer ")
         ? header.slice(7).trim()
         : "";
+      const queryToken = String(req.query.token || req.query.secret || "").trim();
+      const token = headerToken || queryToken;
       if (!token || token !== CRON_SECRET) {
         return res.status(401).json({ success: false, error: "unauthorized" });
       }
@@ -188,19 +190,35 @@ app.get("/api/notify/daily", async (req, res) => {
 
     const title = String(req.query.title || "每日表单填写链接").trim();
 
-    const openIds = DAILY_FORM_BD_OPEN_IDS.length
-      ? DAILY_FORM_BD_OPEN_IDS
-      : [
-          "ou_a58586d5eae4171246d9514720e46db7",
-          "ou_b89e947decf816f6f337f873358a52ec",
-          "ou_f5dac90ed9608641db9db9fa39e2a0ec",
-        ];
+    const openIdQuery =
+      req.query.openIds ??
+      req.query.open_ids ??
+      req.query.openId ??
+      req.query.open_id ??
+      "";
+    const openIdsFromQuery = Array.isArray(openIdQuery)
+      ? openIdQuery
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      : String(openIdQuery || "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean);
+    const openIds = openIdsFromQuery.length
+      ? openIdsFromQuery
+      : DAILY_FORM_BD_OPEN_IDS.length
+        ? DAILY_FORM_BD_OPEN_IDS
+        : [
+            "ou_a58586d5eae4171246d9514720e46db7",
+            "ou_b89e947decf816f6f337f873358a52ec",
+            "ou_f5dac90ed9608641db9db9fa39e2a0ec",
+          ];
 
     let text = `${title}：${url}`;
     if (title.includes("提醒预览")) {
-      text = `请进入BD DAILY或点击链接中的"提醒预览"，查收需要跟进的项目提醒：${url}`;
+      text = `请进入AI策略 DAILY或点击链接中的"提醒预览"，查收需要跟进的项目提醒：${url}`;
     } else if (title.includes("每日表单")) {
-      text = `请进入BD DAILY或点击链接中的"每日表单"进行填写：${url}`;
+      text = `请进入AI策略 DAILY或点击链接中的"每日表单"进行填写：${url}`;
     }
     const results = [];
     for (const openId of openIds) {
@@ -1308,7 +1326,12 @@ function mapProjectRecord(it = {}) {
 
     daysSinceUpdate,
 
-    createdAt: f[PROJECT_FIELD.createdAt] || f.createdAt || "",
+    createdAt:
+      f[PROJECT_FIELD.createdAt] ||
+      f["创建日期"] ||
+      f.createdAt ||
+      it.created_time ||
+      "",
 
     lastUpdateDate:
       f[PROJECT_FIELD.lastUpdateDate] ||
@@ -2041,6 +2064,7 @@ const DEAL_FIELD = {
   grossProfit: "毛利",
   grossMargin: "毛利率",
   lastUpdateDate: "最后更新时间",
+  createdAt: "创建时间",
 };
 
 function mapDealRecord(it = {}) {
@@ -2100,6 +2124,13 @@ function mapDealRecord(it = {}) {
     grossProfit: pickNumber(f[DEAL_FIELD.grossProfit] || f.grossProfit),
     grossMargin: pickNumber(f[DEAL_FIELD.grossMargin] || f.grossMargin),
     lastUpdateDate: f[DEAL_FIELD.lastUpdateDate] || f.lastUpdateDate || "",
+    createdAt:
+      f[DEAL_FIELD.createdAt] ||
+      f["创建时间"] ||
+      f["创建日期"] ||
+      f.createdAt ||
+      it.created_time ||
+      "",
   };
 
   Object.keys(result).forEach((k) => {
@@ -2109,7 +2140,8 @@ function mapDealRecord(it = {}) {
       k === "endDate" ||
       k === "firstPaymentDate" ||
       k === "finalPaymentDate" ||
-      k === "lastUpdateDate"
+      k === "lastUpdateDate" ||
+      k === "createdAt"
     ) {
       const normalized = normalizeAny(v);
       result[k] = formatDateLoose(normalized);

@@ -395,10 +395,10 @@ const ClientsTab: React.FC = () => {
 
               <Select value={bdFilter} onValueChange={setBdFilter}>
                 <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="BD" />
+                  <SelectValue placeholder="AI策略" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">全部BD</SelectItem>
+                  <SelectItem value="all">全部AI策略</SelectItem>
                   {bdOptions.map((bd) => (
                     <SelectItem key={bd} value={bd}>
                       {bd}
@@ -536,7 +536,7 @@ const ClientsTab: React.FC = () => {
                         <span>{selectedClient.hq || "-"}</span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">主BD：</span>
+                        <span className="text-muted-foreground">主AI策略：</span>
                         <span>{selectedClient.owner || "-"}</span>
                       </div>
                       <div>
@@ -638,7 +638,7 @@ const ClientsTab: React.FC = () => {
                   <span>{selectedProject.deliverableName || "-"}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">BD：</span>
+                  <span className="text-muted-foreground">AI策略：</span>
                   <span>{selectedProject.bd || "-"}</span>
                 </div>
                 <div>

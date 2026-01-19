@@ -817,8 +817,8 @@ export default function DailyFormTab() {
                     <OptionSelect value={newClientDraft.industry} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, industry: v })} placeholder="选择行业" options={INDUSTRY_OPTIONS} />
                   </div>
                   <div className="space-y-2">
-                    <Label>主BD</Label>
-                    <OptionSelect value={newClientDraft.ownerBd} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, ownerBd: v })} placeholder="选择BD（可选）" options={BD_OPTIONS} />
+                    <Label>主AI策略</Label>
+                    <OptionSelect value={newClientDraft.ownerBd} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, ownerBd: v })} placeholder="选择AI策略（可选）" options={BD_OPTIONS} />
                   </div>
                   <div className="space-y-2 sm:col-span-2">
                     <Label>公司地区 *</Label>
@@ -983,11 +983,11 @@ export default function DailyFormTab() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>主BD</Label>
+                        <Label>主AI策略</Label>
                         <OptionSelect
                           value={updateClientDraft.ownerBd}
                           onValueChange={(v) => setUpdateClientDraft({ ...updateClientDraft, ownerBd: v })}
-                          placeholder="选择BD（可选）"
+                          placeholder="选择AI策略（可选）"
                           options={BD_OPTIONS}
                         />
                       </div>
@@ -1176,11 +1176,11 @@ export default function DailyFormTab() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>BD *</Label>
+                    <Label>AI策略 *</Label>
                     <OptionSelect
                       value={newProjectDraft.bd}
                       onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, bd: v })}
-                      placeholder="选择BD"
+                      placeholder="选择AI策略"
                       options={
                         projectPersonOptions.bd.length > 0
                           ? projectPersonOptions.bd
@@ -1331,13 +1331,13 @@ export default function DailyFormTab() {
                         <Input type="number" value={updateProjectDraft.expectedAmount} onChange={(e) => setUpdateProjectDraft({ ...updateProjectDraft, expectedAmount: e.target.value })} />
                       </div>
                       <div className="space-y-2">
-                        <Label>BD *</Label>
+                        <Label>AI策略 *</Label>
                         <OptionSelect
                           value={updateProjectDraft.bd}
                           onValueChange={(v) =>
                             setUpdateProjectDraft({ ...updateProjectDraft, bd: v })
                           }
-                          placeholder="选择BD"
+                          placeholder="选择AI策略"
                           options={
                             projectPersonOptions.bd.length > 0
                               ? projectPersonOptions.bd

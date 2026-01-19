@@ -216,7 +216,7 @@ const CustomerEdit: React.FC = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label>主 BD 负责人</Label>
+              <Label>主 AI策略 负责人</Label>
               <Select value={mainBD} onValueChange={setMainBD}>
                 <SelectTrigger>
                   <SelectValue placeholder="请选择" />

@@ -209,7 +209,7 @@ export const PROJECT_TABLE_COLUMNS: ReadonlyArray<TableColumn> = [
   { key: 'stage', title: '项目进度', headClassName: 'w-[100px]' },
   { key: 'priority', title: '优先级', headClassName: 'w-[70px]' },
   { key: 'expectedAmount', title: '预估项目金额', headClassName: 'w-[110px]' },
-  { key: 'bd', title: 'BD', headClassName: 'w-[80px]' },
+  { key: 'bd', title: 'AI策略', headClassName: 'w-[80px]' },
   { key: 'am', title: 'AM', headClassName: 'w-[80px]' },
   { key: 'totalBdHours', title: '累计商务时间(hr)', headClassName: 'w-[130px]' },
   { key: 'lastUpdateDate', title: '最新更新日期', headClassName: 'w-[120px]' },
@@ -221,7 +221,7 @@ export const PROJECT_TABLE_COLUMNS: ReadonlyArray<TableColumn> = [
 export const REMINDER_TABLE_COLUMNS: ReadonlyArray<TableColumn> = [
   { key: 'projectName', title: '项目名称' },
   { key: 'shortName', title: '客户', headClassName: 'w-[80px]' },
-  { key: 'bd', title: 'BD', headClassName: 'w-[60px]' },
+  { key: 'bd', title: 'AI策略', headClassName: 'w-[80px]' },
   { key: 'stage', title: '阶段', headClassName: 'w-[80px]' },
   { key: 'lastUpdateDate', title: '最近更新', headClassName: 'w-[100px]' },
   { key: 'reason', title: '提醒原因', headClassName: 'w-[120px]' },
@@ -256,7 +256,7 @@ export const CUSTOMER_LIST_COLUMNS: ReadonlyArray<TableColumn> = [
   { key: 'type', title: '客户类型' },
   { key: 'level', title: '客户等级' },
   { key: 'industry', title: '行业大类' },
-  { key: 'bdOwner', title: '主BD' },
+  { key: 'bdOwner', title: '主AI策略' },
 ];
 
 export const DAILY_SUMMARY_COLUMNS: ReadonlyArray<TableColumn> = [
@@ -284,6 +284,6 @@ export const LEGACY_PROJECT_LIST_COLUMNS: ReadonlyArray<TableColumn> = [
   { key: 'projectStatus', title: '项目进度' },
   { key: 'priority', title: '优先级' },
   { key: 'estimatedAmount', title: '预估金额' },
-  { key: 'bd', title: 'BD' },
+  { key: 'bd', title: 'AI策略' },
   { key: 'action', title: '操作', headClassName: 'text-right' },
 ];

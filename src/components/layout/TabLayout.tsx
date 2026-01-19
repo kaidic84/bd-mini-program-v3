@@ -9,6 +9,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { dataService } from "@/services/dataService";
 import {
   ClipboardList,
   Bell,
@@ -51,10 +52,34 @@ const tabs: TabItem[] = [
 const TabLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [overviewCounts, setOverviewCounts] = React.useState({
+    newClients: 0,
+    newProjects: 0,
+    newDeals: 0,
+    isLoading: true,
+  });
   const todayLabel = new Date().toLocaleDateString("zh-CN", {
     month: "long",
     day: "numeric",
   });
+
+  React.useEffect(() => {
+    let isActive = true;
+    dataService
+      .getLastWeekOverviewCounts()
+      .then((counts) => {
+        if (!isActive) return;
+        setOverviewCounts({ ...counts, isLoading: false });
+      })
+      .catch((error) => {
+        console.error("[TabLayout] load overview counts failed:", error);
+        if (!isActive) return;
+        setOverviewCounts((prev) => ({ ...prev, isLoading: false }));
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -71,14 +96,18 @@ const TabLayout: React.FC = () => {
         <div className="mx-auto max-w-6xl px-4 pt-4">
           <div className="miniapp-topbar">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-[0_12px_30px_-18px_rgba(255,178,82,0.9)]">
-                <span className="text-sm font-bold">BD</span>
+              <div className="flex h-10 items-center justify-center">
+                <img
+                  src="/brand-logo-app.png"
+                  alt="橙果视界"
+                  className="h-10 w-auto max-w-[120px] object-contain"
+                />
               </div>
               <div className="flex flex-col leading-tight">
                 <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
                   Daily Flow
                 </span>
-                <span className="font-display text-sm text-foreground">BD 日常小程序</span>
+                <span className="font-display text-sm text-foreground">AI策略 日常小程序</span>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -112,8 +141,8 @@ const TabLayout: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <div className="text-sm text-muted-foreground">您好，{user?.name || "伙伴"}</div>
-                  <h1 className="font-display text-3xl sm:text-4xl">BD 日常小程序</h1>
-                  <p className="text-sm text-muted-foreground">项目更新、立项进度、提醒同步，一屏掌控。</p>
+                  <h1 className="font-display text-3xl sm:text-4xl">AI策略 日常小程序</h1>
+                  <p className="text-sm text-muted-foreground">项目更新、立项进度、提醒同步，一屏掌控</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <span className="miniapp-chip">每日 10:00 提醒</span>
@@ -128,19 +157,25 @@ const TabLayout: React.FC = () => {
                     <span>今日概览</span>
                     <span>{todayLabel}</span>
                   </div>
-                  <div className="mt-2 text-lg font-semibold">保持更新节奏</div>
+                  <div className="mt-2 text-lg font-semibold">上周新增概览</div>
                   <div className="mt-3 grid grid-cols-3 gap-3 text-xs text-muted-foreground">
                     <div>
-                      <div className="text-base font-semibold text-foreground">{tabs.length}</div>
-                      <div>核心模块</div>
+                      <div className="text-base font-semibold text-foreground tabular-nums">
+                        {overviewCounts.isLoading ? "-" : overviewCounts.newClients}
+                      </div>
+                      <div>上周新增客户</div>
                     </div>
                     <div>
-                      <div className="text-base font-semibold text-foreground">10:00</div>
-                      <div>提醒发送</div>
+                      <div className="text-base font-semibold text-foreground tabular-nums">
+                        {overviewCounts.isLoading ? "-" : overviewCounts.newProjects}
+                      </div>
+                      <div>上周新增项目</div>
                     </div>
                     <div>
-                      <div className="text-base font-semibold text-foreground">实时</div>
-                      <div>数据同步</div>
+                      <div className="text-base font-semibold text-foreground tabular-nums">
+                        {overviewCounts.isLoading ? "-" : overviewCounts.newDeals}
+                      </div>
+                      <div>上周新增立项</div>
                     </div>
                   </div>
                 </div>
@@ -154,7 +189,7 @@ const TabLayout: React.FC = () => {
                       <ClipboardList className="h-4 w-4 text-primary" />
                       <div>
                         <div className="text-sm font-semibold">每日表单</div>
-                        <div className="text-xs text-muted-foreground">新增与更新项目</div>
+                        <div className="text-xs text-muted-foreground">新增与更新业务数据</div>
                       </div>
                     </NavLink>
                     <NavLink to="reminders" className="miniapp-quick">

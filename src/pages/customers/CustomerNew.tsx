@@ -116,7 +116,7 @@ const CustomerNew: React.FC = () => {
       return;
     }
     if (!mainBD) {
-      toast.error('请选择主 BD 负责人');
+      toast.error('请选择主 AI策略 负责人');
       return;
     }
 
@@ -207,7 +207,7 @@ const CustomerNew: React.FC = () => {
                       <li>企业名称：{existingCustomer.companyName}</li>
                       <li>客户简称：{existingCustomer.shortName}</li>
                       <li>客户部门：{existingCustomer.departmentName}</li>
-                      <li>主 BD：{existingCustomer.mainBD}</li>
+                      <li>主 AI策略：{existingCustomer.mainBD}</li>
                     </ul>
                     <Button
                       variant="outline"
@@ -338,7 +338,7 @@ const CustomerNew: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>主 BD 负责人 *</Label>
+                  <Label>主 AI策略 负责人 *</Label>
                   <Select value={mainBD} onValueChange={setMainBD}>
                     <SelectTrigger>
                       <SelectValue placeholder="请选择" />

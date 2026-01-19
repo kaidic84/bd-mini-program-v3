@@ -99,7 +99,7 @@ const ProjectNew: React.FC = () => {
       return;
     }
     if (!bd) {
-      toast.error('请选择 BD');
+      toast.error('请选择 AI策略');
       return;
     }
     if (!am) {
@@ -307,7 +307,7 @@ const ProjectNew: React.FC = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label>BD *</Label>
+              <Label>AI策略 *</Label>
               <Select value={bd} onValueChange={setBd}>
                 <SelectTrigger>
                   <SelectValue placeholder="请选择" />

@@ -46,6 +46,20 @@ const parseDate = (value: string | Date | undefined | null) => {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 };
 
+const getLastWeekRange = () => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = today.getDay(); // 0=Sun
+  const daysSinceMonday = (day + 6) % 7;
+  const startOfThisWeek = new Date(today);
+  startOfThisWeek.setDate(today.getDate() - daysSinceMonday);
+  const startOfLastWeek = new Date(startOfThisWeek);
+  startOfLastWeek.setDate(startOfThisWeek.getDate() - 7);
+  const endOfLastWeek = new Date(startOfThisWeek);
+  endOfLastWeek.setDate(startOfThisWeek.getDate() - 1);
+  return { start: startOfLastWeek, end: endOfLastWeek };
+};
+
 const getDaysDiff = (from: string | Date | undefined | null, to: string | Date | undefined | null) => {
   const d1 = parseDate(from);
   const d2 = parseDate(to);
@@ -372,6 +386,31 @@ export const dataService = {
 
   async createDailyForm(data: Omit<DailyFormData, 'id' | 'createdAt'>): Promise<DailyFormData> {
     return mockDb.createDailyForm(data);
+  },
+
+  async getLastWeekOverviewCounts(): Promise<{
+    newClients: number;
+    newProjects: number;
+    newDeals: number;
+  }> {
+    const { start, end } = getLastWeekRange();
+    const isInLastWeek = (value: string | Date | undefined | null) => {
+      const date = parseDate(value);
+      if (!date) return false;
+      return date >= start && date <= end;
+    };
+
+    const [clients, projects, deals] = await Promise.all([
+      this.getAllClients(),
+      this.getAllProjects(),
+      this.getAllDeals(),
+    ]);
+
+    const newClients = clients.filter((client) => isInLastWeek(client.createdAt)).length;
+    const newProjects = projects.filter((project) => isInLastWeek(project.createdAt)).length;
+    const newDeals = deals.filter((deal) => isInLastWeek(deal.createdAt)).length;
+
+    return { newClients, newProjects, newDeals };
   },
 
   // ==================== ????????? ====================
