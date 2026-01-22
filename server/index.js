@@ -444,6 +444,15 @@ function resolveSelectOptionName(fieldInfo, inputValue) {
   return match?.name || raw;
 }
 
+const READONLY_FIELD_TYPES = new Set([19, 20, 1001, 1002, 1005]);
+
+function isReadonlyField(infoMap, expectedName) {
+  if (!infoMap) return false;
+  const info = infoMap.get(normalizeFieldName(expectedName));
+  if (!info || info.type == null) return false;
+  return READONLY_FIELD_TYPES.has(info.type);
+}
+
 
 
 
@@ -828,6 +837,7 @@ app.put("/api/customers/:customerId", async (req, res) => {
     // 2) build fields (DO NOT touch 客户ID)
 
     const body = req.body || {};
+    const fieldInfoMap = await getFieldInfoMap(PROJECT_APP_TOKEN, PROJECT_TABLE_ID);
 
     const fields = {};
 
@@ -1108,9 +1118,10 @@ const PROJECT_FIELD = {
 
   shortName: "客户/部门简称",
 
-  campaignName: "活动名称",
+  campaignName: "活动&交付名称",
 
-  deliverableName: "交付名称",
+  platform: "平台",
+  deliverableName: "平台",
 
   month: "所属年月",
 
@@ -1280,6 +1291,20 @@ function mapProjectRecord(it = {}) {
       ? undefined
       : pickNumber(rawDaysSinceUpdate);
 
+  const rawCampaignName =
+    f[PROJECT_FIELD.campaignName] ||
+    f["活动名称"] ||
+    f.campaignName ||
+    "";
+
+  const rawPlatform =
+    f[PROJECT_FIELD.platform] ||
+    f["平台"] ||
+    f["交付名称"] ||
+    f.platform ||
+    f.deliverableName ||
+    "";
+
   const result = {
 
     projectId:
@@ -1314,9 +1339,9 @@ function mapProjectRecord(it = {}) {
 
     month: f[PROJECT_FIELD.month] || f["所属月份"] || f.month || "",
 
-    campaignName: f[PROJECT_FIELD.campaignName] || f.campaignName || "",
-
-    deliverableName: f[PROJECT_FIELD.deliverableName] || f.deliverableName || "",
+    campaignName: rawCampaignName,
+    platform: rawPlatform,
+    deliverableName: rawPlatform,
 
     expectedAmount: pickNumber(f[PROJECT_FIELD.expectedAmount] || f.expectedAmount),
 
@@ -1567,6 +1592,7 @@ app.post("/api/projects", async (req, res) => {
 
 
     const body = req.body || {};
+    const fieldInfoMap = await getFieldInfoMap(PROJECT_APP_TOKEN, PROJECT_TABLE_ID);
 
     const projectName = String(body.projectName || "").trim();
 
@@ -1583,13 +1609,29 @@ app.post("/api/projects", async (req, res) => {
     const warnings = [];
 
     const setField = (key, value) => {
+      const fieldName = PROJECT_FIELD[key];
+      if (fieldName && isReadonlyField(fieldInfoMap, fieldName)) return;
 
       const isEmptyString = typeof value === "string" && value.trim() === "";
 
       if (value === undefined || value === null || isEmptyString) return;
 
-      fields[PROJECT_FIELD[key]] = value;
+      fields[fieldName] = value;
 
+    };
+
+    const setSelectField = (key, value) => {
+      const fieldName = PROJECT_FIELD[key];
+      if (!fieldName) return;
+      const isEmptyString = typeof value === "string" && value.trim() === "";
+      if (value === undefined || value === null || isEmptyString) return;
+      const info = fieldInfoMap?.get(normalizeFieldName(fieldName));
+      if (info) {
+        const optionName = resolveSelectOptionName(info, value);
+        const selectValue = toSelectValue(optionName, info.type);
+        return setField(key, selectValue);
+      }
+      return setField(key, value);
     };
 
 
@@ -1614,7 +1656,8 @@ app.post("/api/projects", async (req, res) => {
 
     setField("campaignName", body.campaignName);
 
-    setField("deliverableName", body.deliverableName);
+    const platformValue = body.platform ?? body.deliverableName;
+    setSelectField("platform", platformValue);
 
     setField("totalBdHours", body.totalBdHours);
 
@@ -1816,19 +1859,36 @@ app.put("/api/projects/:projectId", async (req, res) => {
 
 
     const body = req.body || {};
+    const fieldInfoMap = await getFieldInfoMap(PROJECT_APP_TOKEN, PROJECT_TABLE_ID);
 
     const fields = {};
 
     const warnings = [];
 
     const setField = (key, value) => {
+      const fieldName = PROJECT_FIELD[key];
+      if (fieldName && isReadonlyField(fieldInfoMap, fieldName)) return;
 
       const isEmptyString = typeof value === "string" && value.trim() === "";
 
       if (value === undefined || value === null || isEmptyString) return;
 
-      fields[PROJECT_FIELD[key]] = value;
+      fields[fieldName] = value;
 
+    };
+
+    const setSelectField = (key, value) => {
+      const fieldName = PROJECT_FIELD[key];
+      if (!fieldName) return;
+      const isEmptyString = typeof value === "string" && value.trim() === "";
+      if (value === undefined || value === null || isEmptyString) return;
+      const info = fieldInfoMap?.get(normalizeFieldName(fieldName));
+      if (info) {
+        const optionName = resolveSelectOptionName(info, value);
+        const selectValue = toSelectValue(optionName, info.type);
+        return setField(key, selectValue);
+      }
+      return setField(key, value);
     };
 
 
@@ -1851,7 +1911,8 @@ app.put("/api/projects/:projectId", async (req, res) => {
 
     setField("campaignName", body.campaignName);
 
-    setField("deliverableName", body.deliverableName);
+    const platformValue = body.platform ?? body.deliverableName;
+    setSelectField("platform", platformValue);
 
     setField("totalBdHours", body.totalBdHours);
 

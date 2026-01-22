@@ -630,12 +630,12 @@ const ClientsTab: React.FC = () => {
                   <span>{selectedProject.month || "-"}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">活动名称：</span>
+                  <span className="text-muted-foreground">活动&交付名称：</span>
                   <span>{selectedProject.campaignName || "-"}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">交付名称：</span>
-                  <span>{selectedProject.deliverableName || "-"}</span>
+                  <span className="text-muted-foreground">平台：</span>
+                  <span>{selectedProject.platform || selectedProject.deliverableName || "-"}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">AI策略：</span>

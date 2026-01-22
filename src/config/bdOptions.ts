@@ -20,6 +20,27 @@ export type ProjectType = (typeof PROJECT_TYPE_OPTIONS)[number];
 export const PROJECT_PRIORITY_OPTIONS = ['P0', 'P1', 'P2'] as const;
 export type ProjectPriority = (typeof PROJECT_PRIORITY_OPTIONS)[number];
 
+export const PROJECT_PLATFORM_OPTIONS = [
+  '海外全平台',
+  '国内全平台',
+  '海外电商',
+  '国内电商',
+  '小红书',
+  '抖音',
+  '视频号',
+  '微信公众号',
+  'TikTok',
+  'Instagram',
+  'Youtube',
+  'Facebook',
+  'Reddit',
+  '线下发布会/展会',
+  '线下门店',
+  '私域/培训',
+  '其他',
+] as const;
+export type ProjectPlatform = (typeof PROJECT_PLATFORM_OPTIONS)[number];
+
 export const PROJECT_STAGE_BADGE_CLASS: Record<ProjectStage, string> = {
   未开始: 'bg-secondary/10 text-secondary-foreground border-secondary/30',
   进行中: 'bg-primary/10 text-primary border-primary/30',
@@ -50,9 +71,6 @@ export const MONTH_OPTIONS = [
 ] as const;
 
 export const LEAD_MONTH_OPTIONS = [
-  '2025-03',
-  '2025-04',
-  '2025-05',
   '2025-06',
   '2025-07',
   '2025-08',
@@ -66,15 +84,20 @@ export const LEAD_MONTH_OPTIONS = [
   '2026-04',
   '2026-05',
   '2026-06',
+  '2026-07',
+  '2026-08',
+  '2026-09',
+  '2026-10',
+  '2026-11',
+  '2026-12'
 ] as const;
 
 export const CUSTOMER_TYPE_OPTIONS = [
   '品牌方',
-  '代理',
-  '机构',
-  '平台',
+  '机构&代理',
   '政府',
-  '潜在客户',
+  '平台',
+  '潜在客户'
 ] as const;
 
 export const INDUSTRY_OPTIONS = [
@@ -84,18 +107,16 @@ export const INDUSTRY_OPTIONS = [
   '服装配饰',
   '家装家居',
   '宠物',
-  '平台&工具',
-  '文旅文创',
+  '平台&工具&教育',
+  '文旅文创&文化产业',
   '食品饮料',
   '生物医药',
   '金融投资',
-  '其他B2B服务',
-  '教育',
-  '医疗健康',
-  '美妆',
+  '日用消费品',
+  '其他B2B服务'
 ] as const;
 
-export const CLIENT_LEVEL_OPTIONS = ['SKA', 'KA', '普通', '战略', 'A', '潜力'] as const;
+export const CLIENT_LEVEL_OPTIONS = ['SKA', 'KA', '普通', '战略'] as const;
 
 export const COOPERATION_STATUS_OPTIONS = [
   '潜在',
@@ -201,8 +222,8 @@ export const PROJECT_TABLE_COLUMNS: ReadonlyArray<TableColumn> = [
   { key: 'customerId', title: '客户ID', headClassName: 'w-[80px]' },
   { key: 'projectName', title: '项目名称', headClassName: 'w-[120px]' },
   { key: 'shortName', title: '客户/部门简称', headClassName: 'w-[120px]' },
-  { key: 'campaignName', title: '活动名称', headClassName: 'w-[100px]' },
-  { key: 'deliverableName', title: '交付名称', headClassName: 'w-[100px]' },
+  { key: 'campaignName', title: '活动&交付名称', headClassName: 'w-[120px]' },
+  { key: 'deliverableName', title: '平台', headClassName: 'w-[100px]' },
   { key: 'month', title: '所属年月', headClassName: 'w-[80px]' },
   { key: 'serviceType', title: '服务类型', headClassName: 'w-[100px]' },
   { key: 'projectType', title: '项目类别', headClassName: 'w-[80px]' },

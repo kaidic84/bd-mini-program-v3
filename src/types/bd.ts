@@ -41,6 +41,7 @@ export interface Client {
 export type ProjectStage = import('@/config/bdOptions').ProjectStage;
 export type ProjectType = import('@/config/bdOptions').ProjectType;
 export type ProjectPriority = import('@/config/bdOptions').ProjectPriority;
+export type ProjectPlatform = import('@/config/bdOptions').ProjectPlatform;
 
 export interface Project {
   /** ✅ 新：统一字段 */
@@ -49,7 +50,7 @@ export interface Project {
   customerId: string;      // 关联客户 id（旧代码也在用 customerId）
   shortName: string;       // 冗余存客户简称（用于展示/拼项目名）
 
-  projectName: string;     // 展示用项目名（month-shortName-campaign-deliverable）
+  projectName: string;     // 展示用项目名（month-shortName-campaign-platform）
   serviceType: string;
   projectType: ProjectType;
   stage: ProjectStage;
@@ -63,7 +64,8 @@ export interface Project {
 
   /** 🧯 兼容 DailyFormTab / 你旧的项目创建逻辑 */
   campaignName?: string;
-  deliverableName?: string;
+  platform?: string;
+  deliverableName?: string; // alias -> platform
   expectedAmount?: number;
 
   totalBdHours?: number;
@@ -231,6 +233,7 @@ export {
   PROJECT_TYPE_OPTIONS,
   PROJECT_STAGE_OPTIONS,
   PROJECT_PRIORITY_OPTIONS,
+  PROJECT_PLATFORM_OPTIONS,
   PROJECT_STAGE_BADGE_CLASS,
   PROJECT_TABLE_COLUMNS,
   DEAL_TABLE_COLUMNS,

@@ -13,6 +13,7 @@ import {
   MONTH_OPTIONS,
   LEAD_MONTH_OPTIONS,
   PROJECT_PRIORITY_OPTIONS,
+  PROJECT_PLATFORM_OPTIONS,
   PROJECT_STAGE_OPTIONS,
   PROJECT_TYPE_OPTIONS,
   SERVICE_TYPE_OPTIONS,
@@ -56,7 +57,7 @@ type NewProjectDraft = {
   month: string;
   serviceType: string;
   campaignName: string;
-  deliverableName: string;
+  platform: string;
   projectType: string;
   stage: string;
   priority: string;
@@ -164,7 +165,7 @@ const makeEmptyNewProjectDraft = (): NewProjectDraft => {
     month: "",
     serviceType: "",
     campaignName: "",
-    deliverableName: "",
+    platform: "",
     projectType: "",
     stage: "",
     priority: "",
@@ -181,7 +182,7 @@ const validateNewProject = (p: NewProjectDraft) =>
   !isBlank(p.month) &&
   !isBlank(p.serviceType) &&
   !isBlank(p.campaignName) &&
-  !isBlank(p.deliverableName) &&
+  !isBlank(p.platform) &&
   !isBlank(p.projectType) &&
   !isBlank(p.stage) &&
   !isBlank(p.priority) &&
@@ -192,14 +193,14 @@ const isNewProjectBlank = (p: NewProjectDraft) =>
   isBlank(p.month) &&
   isBlank(p.serviceType) &&
   isBlank(p.campaignName) &&
-  isBlank(p.deliverableName) &&
+  isBlank(p.platform) &&
   isBlank(p.projectType) &&
   isBlank(p.stage) &&
   isBlank(p.priority) &&
   isBlank(p.bd);
 
-const projectNameFromDraft = (p: Pick<NewProjectDraft, "month" | "shortName" | "campaignName" | "deliverableName">) =>
-  `${p.month}-${p.shortName}-${p.campaignName}-${p.deliverableName}`;
+const projectNameFromDraft = (p: Pick<NewProjectDraft, "month" | "shortName" | "campaignName" | "platform">) =>
+  `${p.month}-${p.shortName}-${p.campaignName}-${p.platform}`;
 
 const projectToUpdateDraft = (project: Project): UpdateProjectDraft => {
   const today = new Date();
@@ -211,7 +212,7 @@ const projectToUpdateDraft = (project: Project): UpdateProjectDraft => {
     month: String((project as any).month || "").trim(),
     serviceType: String((project as any).serviceType || "").trim(),
     campaignName: String((project as any).campaignName || "").trim(),
-    deliverableName: String((project as any).deliverableName || "").trim(),
+    platform: String((project as any).platform || (project as any).deliverableName || "").trim(),
     projectType: String((project as any).projectType || "").trim(),
     stage: String((project as any).stage || "").trim(),
     priority: String((project as any).priority || "").trim(),
@@ -667,7 +668,7 @@ export default function DailyFormTab() {
               month: p.month,
               serviceType: p.serviceType,
               campaignName: p.campaignName,
-              deliverableName: p.deliverableName,
+              platform: p.platform,
               projectType: p.projectType as any,
               stage: p.stage as any,
               priority: p.priority as any,
@@ -706,7 +707,7 @@ export default function DailyFormTab() {
               month: p.month,
               serviceType: p.serviceType,
               campaignName: p.campaignName,
-              deliverableName: p.deliverableName,
+              platform: p.platform,
               projectType: p.projectType as any,
               stage: p.stage as any,
               priority: p.priority as any,
@@ -1127,17 +1128,19 @@ export default function DailyFormTab() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>活动名称 *</Label>
+                    <Label>活动&交付名称 *</Label>
                     <Input
                       value={newProjectDraft.campaignName}
                       onChange={(e) => setNewProjectDraft({ ...newProjectDraft, campaignName: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>交付名称 *</Label>
-                    <Input
-                      value={newProjectDraft.deliverableName}
-                      onChange={(e) => setNewProjectDraft({ ...newProjectDraft, deliverableName: e.target.value })}
+                    <Label>平台 *</Label>
+                    <OptionSelect
+                      value={newProjectDraft.platform}
+                      onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, platform: v })}
+                      placeholder="选择平台"
+                      options={PROJECT_PLATFORM_OPTIONS}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1202,7 +1205,7 @@ export default function DailyFormTab() {
                 {!isBlank(newProjectDraft.month) &&
                   !isBlank(newProjectDraft.shortName) &&
                   !isBlank(newProjectDraft.campaignName) &&
-                  !isBlank(newProjectDraft.deliverableName) && (
+                  !isBlank(newProjectDraft.platform) && (
                     <div className="p-3 bg-muted rounded-lg text-sm">
                       <span className="text-muted-foreground">项目名称预览：</span>
                       <span className="font-medium">{projectNameFromDraft(newProjectDraft)}</span>
@@ -1292,12 +1295,17 @@ export default function DailyFormTab() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>活动名称 *</Label>
+                        <Label>活动&交付名称 *</Label>
                         <Input value={updateProjectDraft.campaignName} onChange={(e) => setUpdateProjectDraft({ ...updateProjectDraft, campaignName: e.target.value })} />
                       </div>
                       <div className="space-y-2">
-                        <Label>交付名称 *</Label>
-                        <Input value={updateProjectDraft.deliverableName} onChange={(e) => setUpdateProjectDraft({ ...updateProjectDraft, deliverableName: e.target.value })} />
+                        <Label>平台 *</Label>
+                        <OptionSelect
+                          value={updateProjectDraft.platform}
+                          onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, platform: v })}
+                          placeholder="选择平台"
+                          options={PROJECT_PLATFORM_OPTIONS}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>项目类别 *</Label>
