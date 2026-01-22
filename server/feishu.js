@@ -189,6 +189,7 @@ export async function getCustomers({ keyword } = {}) {
   const customers = items.map((it) => {
     const f = it.fields || {};
     const createdAtRaw =
+      f["客户信息创建时间"] ??
       f["创建时间"] ??
       f["创建日期"] ??
       f["记录创建时间"] ??
