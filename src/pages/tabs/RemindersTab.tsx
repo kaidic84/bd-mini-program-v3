@@ -811,11 +811,11 @@ const RemindersTab: React.FC = () => {
                       <TableBody>
                         {signedReminders.map((item) => (
                           <TableRow key={item.dealId || item.projectId}>
-                            <TableCell className="max-w-[220px] truncate font-medium" title={item.projectName}>
+                          <TableCell className="max-w-[220px] truncate font-medium" title={item.projectName}>
                               {item.projectName}
                             </TableCell>
                             <TableCell>{item.shortName || '-'}</TableCell>
-                            <TableCell className="text-destructive text-xs">24小时未更新</TableCell>
+                            <TableCell className="text-destructive text-xs">未走立项流程</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -837,7 +837,7 @@ const RemindersTab: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="text-xs text-destructive">24小时未更新</div>
+                      <div className="text-xs text-destructive">未走立项流程</div>
                     </CardContent>
                   </Card>
                 ))}
@@ -864,10 +864,15 @@ const RemindersTab: React.FC = () => {
                 </ul>
               </div>
               <div>
-                <p className="font-medium mb-1">已签单项目：</p>
-                <div className="ml-2 text-xs text-muted-foreground">最后更新时间超过 1 个工作日 → 红色提醒</div>
+                <p className="font-medium mb-1">签单未立项项目：</p>
+                <div className="ml-2 text-xs text-muted-foreground">
+                  含税收入为空 且 立项创建时间超过 1 个工作日 → 未走立项流程
+                </div>
+                <div className="ml-2 text-xs text-muted-foreground">是否完结 = 丢单 → 不提醒</div>
                 <p className="font-medium mt-3">已立项项目：</p>
                 <ul className="list-disc list-inside ml-2 space-y-0.5">
+                  <li>确认已跟进后，4 个自然日内不再提醒</li>
+                  <li>4 天到期且未更新 → 恢复按结束时间判断</li>
                   <li>结束时间 = 今日 → 黄色提醒</li>
                   <li>已过结束时间 → 红色提醒</li>
                 </ul>

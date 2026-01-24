@@ -123,7 +123,7 @@ const Login: React.FC = () => {
             </form>
             <div className="mt-6 rounded-lg bg-muted p-4">
               <p className="text-center text-sm text-muted-foreground">
-                当前仅允许指定AI策略账号登录
+                当前仅允许指定BD账号登录
               </p>
             </div>
           </CardContent>

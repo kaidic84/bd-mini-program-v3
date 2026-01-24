@@ -90,6 +90,47 @@ const resolveCustomerBdField = (data: Partial<Client> & { owner?: string; ownerB
   return { ownerBd, ownerUserId };
 };
 
+const FOLLOW_UP_STORAGE_KEY = 'bd_follow_up_overrides';
+
+const loadFollowUpOverrides = (): Record<string, string> => {
+  if (typeof window === 'undefined' || !window.localStorage) return {};
+  try {
+    const raw = window.localStorage.getItem(FOLLOW_UP_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed as Record<string, string>;
+  } catch (e) {
+    return {};
+  }
+};
+
+const saveFollowUpOverrides = (data: Record<string, string>) => {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(FOLLOW_UP_STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    // ignore storage errors
+  }
+};
+
+const setFollowUpOverride = (projectId: string, when: Date = new Date()) => {
+  const id = String(projectId || '').trim();
+  if (!id) return;
+  const overrides = loadFollowUpOverrides();
+  overrides[id] = String(when.getTime());
+  saveFollowUpOverrides(overrides);
+};
+
+const clearFollowUpOverride = (projectId: string) => {
+  const id = String(projectId || '').trim();
+  if (!id) return;
+  const overrides = loadFollowUpOverrides();
+  if (!(id in overrides)) return;
+  delete overrides[id];
+  saveFollowUpOverrides(overrides);
+};
+
 export const dataService = {
   // ==================== 客户操作 ====================
 
@@ -473,6 +514,8 @@ export const dataService = {
     const projects = await this.getAllProjects();
     const deals = await this.getAllDeals();
     const today = new Date();
+    const followUpDelayDays = 4;
+    const followUpOverrides = loadFollowUpOverrides();
 
     const normalizeName = (value: unknown) => String(value || '').trim().toLowerCase().replace(/\s+/g, '');
     const projectMap = new Map(projects.map((p) => [String(p.projectId || '').trim(), p]));
@@ -503,7 +546,23 @@ export const dataService = {
           projectMap.get(projectId) ||
           projectNameMap.get(projectName) ||
           projectNameNormalizedMap.get(normalizeName(projectName));
-        if (p?.isFollowedUp) return null;
+        const followUpFlag = Boolean(p?.isFollowedUp);
+        const overrideRaw = followUpOverrides[String(projectId || p?.projectId || '').trim() || ''];
+        const overrideDate = overrideRaw ? parseDate(overrideRaw) : null;
+        const lastUpdateDate = p?.lastUpdateDate ? parseDate(p.lastUpdateDate) : null;
+        let followUpStart: Date | null = null;
+        if (followUpFlag && lastUpdateDate) followUpStart = lastUpdateDate;
+        if (overrideDate && lastUpdateDate && lastUpdateDate > overrideDate) {
+          followUpStart = lastUpdateDate;
+        } else if (overrideDate) {
+          followUpStart = followUpStart || overrideDate;
+        }
+        const followUpAge = followUpStart ? getDaysDiff(followUpStart, today) : null;
+        const followUpActive = followUpAge !== null && followUpAge < followUpDelayDays;
+        if (followUpActive) return null;
+        if (overrideRaw && followUpAge !== null && followUpAge >= followUpDelayDays) {
+          clearFollowUpOverride(String(projectId || p?.projectId || '').trim());
+        }
         return {
           projectId: p?.projectId || projectId || d.dealId,
           dealId: d.dealId,
@@ -513,6 +572,7 @@ export const dataService = {
           bd: p?.bd || '',
           projectType: p?.projectType || '签单',
           stage: p?.stage || '未开始',
+          isFollowedUp: false,
           projectEndDate: endDate,
           daysUntilEnd,
           reminderLevel,
@@ -538,20 +598,41 @@ export const dataService = {
       clients.map((c) => [String(c.customerId || c.id || '').trim(), c])
     );
 
-    const pickLastUpdate = (deal: Deal) => {
+    const isIncomeFilled = (value: unknown) => {
+      if (value === null || value === undefined || value === '') return false;
+      const num = Number(value);
+      if (Number.isFinite(num)) return num > 0;
+      return Boolean(String(value).trim());
+    };
+
+    const isDropped = (value: unknown) => {
+      if (value === null || value === undefined) return false;
+      if (Array.isArray(value)) return value.some((item) => isDropped(item));
+      const raw = String(value).trim();
+      if (!raw) return false;
+      return raw.includes('丢单');
+    };
+
+    const pickCreatedAt = (deal: Deal) => {
       const d: any = deal as any;
       return (
-        d.lastUpdateDate ||
-        d.updatedAt ||
-        d.lastUpdate ||
-        d.updateAt ||
-        d['最后更新时间'] ||
+        d.createdAt ||
+        d.createdTime ||
+        d.createTime ||
+        d['创建时间'] ||
+        d['创建日期'] ||
+        d['立项创建时间'] ||
+        d['立项创建日期'] ||
         ''
       );
     };
 
     return deals
       .map((deal) => {
+        const finishState = (deal as any).isFinished ?? (deal as any)['是否完结'] ?? '';
+        if (isDropped(finishState)) return null;
+        if (isIncomeFilled(deal.incomeWithTax)) return null;
+
         const projectId = String(deal.projectId || '').trim();
         const project = projectMap.get(projectId);
         const projectName = project?.projectName || String(deal.projectName || '').trim() || deal.dealId;
@@ -559,9 +640,9 @@ export const dataService = {
         const client = clientMap.get(customerId);
         const shortName = project?.shortName || client?.shortName || '';
         const bd = String(project?.bd || '').trim();
-        const lastUpdateDate = String(pickLastUpdate(deal) || '').trim();
-        if (!lastUpdateDate) return null;
-        const overdueDays = getBusinessDaysDiff(lastUpdateDate, today);
+        const createdAt = String(pickCreatedAt(deal) || '').trim();
+        if (!createdAt) return null;
+        const overdueDays = getBusinessDaysDiff(createdAt, today);
         if (overdueDays < 1) return null;
         return {
           projectId: projectId || String(deal.dealId || '').trim(),
@@ -570,7 +651,6 @@ export const dataService = {
           customerId: customerId || undefined,
           shortName,
           bd,
-          lastUpdateDate,
         } as SignedReminderItem;
       })
       .filter(Boolean) as SignedReminderItem[];
@@ -583,7 +663,9 @@ export const dataService = {
     ).padStart(2, '0')}`;
     const payload: Partial<Project> = { isFollowedUp: true, lastUpdateDate };
     if (USE_FEISHU_API) {
-      return feishuBitableApi.updateProject(projectId, payload);
+      const success = await feishuBitableApi.updateProject(projectId, payload);
+      if (success) setFollowUpOverride(projectId, now);
+      return success;
     }
     try {
       const { res, json } = await fetchJson(`/api/projects/${encodeURIComponent(projectId)}`, {
@@ -594,6 +676,7 @@ export const dataService = {
       if (!res.ok || !json?.success) {
         throw new Error(json?.error || `Request failed with status ${res.status}`);
       }
+      setFollowUpOverride(projectId, now);
       return true;
     } catch (e) {
       console.error('[dataService] confirmFollowUp via backend failed:', e);

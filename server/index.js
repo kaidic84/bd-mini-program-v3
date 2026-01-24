@@ -62,6 +62,8 @@ const DEAL_TABLE_ID = process.env.FEISHU_BITABLE_DEAL_TABLE_ID;
 
 const KANBAN_APP_TOKEN = process.env.FEISHU_KANBAN_APP_TOKEN || process.env.FEISHU_BITABLE_APP_TOKEN;
 const KANBAN_BOARD_ID = process.env.FEISHU_KANBAN_BOARD_ID;
+const KANBAN_EMBED_URL = process.env.FEISHU_KANBAN_EMBED_URL;
+const KANBAN_EMBED_BASE_URL = process.env.FEISHU_KANBAN_EMBED_BASE_URL;
 const DASHBOARD_EMBED_URL = process.env.FEISHU_DASHBOARD_EMBED_URL;
 const DAILY_FORM_URL = process.env.DAILY_FORM_URL || "";
 const DAILY_FORM_BD_OPEN_IDS = String(process.env.DAILY_FORM_BD_OPEN_IDS || "")
@@ -126,6 +128,62 @@ function sendKanbanPlaceholder(res, data, extra = {}) {
 
   });
 
+}
+
+function resolveKanbanEmbedUrl() {
+  const boardId = KANBAN_BOARD_ID || "";
+
+  const replaceBoardId = (value) => {
+    if (!value || !boardId) return value;
+    return value
+      .replaceAll("{boardId}", boardId)
+      .replaceAll("{{boardId}}", boardId)
+      .replaceAll("${boardId}", boardId);
+  };
+
+  const withEmbedParams = (value) => {
+    if (!value) return "";
+    try {
+      const url = new URL(value);
+      if (!url.searchParams.has("iframeFrom")) {
+        url.searchParams.set("iframeFrom", "docx");
+      }
+      if (!url.searchParams.has("ccm_open")) {
+        url.searchParams.set("ccm_open", "iframe");
+      }
+      return url.toString();
+    } catch (e) {
+      return value;
+    }
+  };
+
+  if (KANBAN_EMBED_URL) {
+    return withEmbedParams(replaceBoardId(KANBAN_EMBED_URL));
+  }
+
+  if (KANBAN_EMBED_BASE_URL && boardId) {
+    const normalizedBase = KANBAN_EMBED_BASE_URL.endsWith("/")
+      ? KANBAN_EMBED_BASE_URL
+      : `${KANBAN_EMBED_BASE_URL}/`;
+    return withEmbedParams(`${normalizedBase}${boardId}`);
+  }
+
+  if (DASHBOARD_EMBED_URL) {
+    try {
+      const url = new URL(DASHBOARD_EMBED_URL);
+      if (boardId) {
+        const hash = url.hash.replace(/^#/, "");
+        if (!hash.includes("block_id=")) {
+          url.hash = `block_id=${boardId}`;
+        }
+      }
+      return withEmbedParams(url.toString());
+    } catch (e) {
+      return withEmbedParams(DASHBOARD_EMBED_URL);
+    }
+  }
+
+  return "";
 }
 
 
@@ -2189,6 +2247,8 @@ function mapDealRecord(it = {}) {
       f[DEAL_FIELD.createdAt] ||
       f["创建时间"] ||
       f["创建日期"] ||
+      f["立项创建时间"] ||
+      f["立项创建日期"] ||
       f.createdAt ||
       it.created_time ||
       "",
@@ -2977,6 +3037,24 @@ app.get("/api/project-persons", async (req, res) => {
 
 
 // ====== 看板（Kanban）接口预?======
+
+app.get("/api/kanban/embed", (req, res) => {
+  const url = resolveKanbanEmbedUrl();
+  if (!url) {
+    return res.status(500).json({
+      success: false,
+      error:
+        "missing FEISHU_KANBAN_EMBED_URL (or FEISHU_DASHBOARD_EMBED_URL with FEISHU_KANBAN_BOARD_ID)",
+    });
+  }
+  return res.json({
+    success: true,
+    data: {
+      url,
+      boardId: KANBAN_BOARD_ID || null,
+    },
+  });
+});
 
 app.get("/api/kanban/boards", (req, res) => {
 
