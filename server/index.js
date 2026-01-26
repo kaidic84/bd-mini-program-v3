@@ -71,6 +71,10 @@ const DAILY_FORM_BD_OPEN_IDS = String(process.env.DAILY_FORM_BD_OPEN_IDS || "")
   .map((s) => s.trim())
   .filter(Boolean);
 const CRON_SECRET = String(process.env.CRON_SECRET || "").trim();
+const AUTH_LINK_SECRET = String(process.env.FEISHU_AUTH_LINK_SECRET || "").trim();
+const AUTH_LINK_TTL_MINUTES = Number(process.env.FEISHU_AUTH_LINK_TTL_MINUTES || 10);
+const AUTH_LINK_BASE_URL = String(process.env.FEISHU_AUTH_LINK_BASE_URL || "").trim();
+const AUTH_WHITELIST_RAW = String(process.env.FEISHU_AUTH_WHITELIST || "").trim();
 
 let cachedJsapiTicket = null;
 let jsapiTicketExpireAt = 0;
@@ -91,6 +95,239 @@ function getCurrentOpenId(req) {
   if (headerOpenId) return headerOpenId;
   const envOpenId = String(process.env.FEISHU_OPEN_ID || process.env.FEISHU_USER_OPEN_ID || "").trim();
   return envOpenId;
+}
+
+const authWhitelist = buildAuthWhitelist(AUTH_WHITELIST_RAW);
+
+function base64UrlEncode(value) {
+  return Buffer.from(String(value || ""), "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value) {
+  const raw = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const pad = raw.length % 4 ? "=".repeat(4 - (raw.length % 4)) : "";
+  return Buffer.from(`${raw}${pad}`, "base64").toString("utf8");
+}
+
+function signAuthPayload(payload) {
+  if (!AUTH_LINK_SECRET) return "";
+  return crypto
+    .createHmac("sha256", AUTH_LINK_SECRET)
+    .update(String(payload || ""), "utf8")
+    .digest("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function safeEqual(a, b) {
+  const left = Buffer.from(String(a || ""));
+  const right = Buffer.from(String(b || ""));
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}
+
+function issueAuthToken(user, ttlMinutes = AUTH_LINK_TTL_MINUTES) {
+  const now = Date.now();
+  const ttlMs =
+    Number.isFinite(ttlMinutes) && ttlMinutes > 0 ? ttlMinutes * 60 * 1000 : 10 * 60 * 1000;
+  const payload = {
+    openId: user.openId || "",
+    username: user.username || "",
+    name: user.name || "",
+    iat: now,
+    exp: now + ttlMs,
+  };
+  const payloadRaw = JSON.stringify(payload);
+  const payloadB64 = base64UrlEncode(payloadRaw);
+  const signature = signAuthPayload(payloadB64);
+  return { token: `${payloadB64}.${signature}`, payload };
+}
+
+function verifyAuthToken(token) {
+  const raw = String(token || "").trim();
+  if (!raw) return null;
+  const parts = raw.split(".");
+  if (parts.length !== 2) return null;
+  const [payloadB64, signature] = parts;
+  const expected = signAuthPayload(payloadB64);
+  if (!expected || !safeEqual(signature, expected)) return null;
+  let payload;
+  try {
+    payload = JSON.parse(base64UrlDecode(payloadB64));
+  } catch (e) {
+    return null;
+  }
+  if (!payload || typeof payload !== "object") return null;
+  const exp = Number(payload.exp || 0);
+  if (!Number.isFinite(exp) || exp <= Date.now()) return null;
+  const user = resolveAuthUser({
+    openId: payload.openId,
+    username: payload.username,
+    name: payload.name,
+  });
+  if (!user) return null;
+  return { payload, user };
+}
+
+function resolveAuthOrigin(req) {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const proto = forwardedProto || req.protocol || "http";
+  const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = forwardedHost || req.headers.host || "";
+  if (!host) return "";
+  return `${proto}://${host}`;
+}
+
+function buildAuthLink(req, token, redirect) {
+  const origin = resolveAuthOrigin(req);
+  const base = AUTH_LINK_BASE_URL || (origin ? `${origin}/login` : "");
+  if (!base) return "";
+  const url = new URL(base, origin || undefined);
+  url.searchParams.set("token", token);
+  if (redirect) {
+    url.searchParams.set("redirect", String(redirect));
+  }
+  return url.toString();
+}
+
+function normalizeAuthRecord(record) {
+  if (!record) return null;
+  const openId = String(record.openId || record.open_id || record.id || "").trim();
+  const username = String(record.username || record.user || record.account || "").trim();
+  const name = String(record.name || record.displayName || record.realName || "").trim();
+  const fallback = username || name || openId;
+  if (!openId && !fallback) return null;
+  return {
+    openId,
+    username: username || fallback,
+    name: name || username || fallback,
+  };
+}
+
+function buildAuthWhitelist(raw) {
+  const byOpenId = new Map();
+  const byUsername = new Map();
+  const addRecord = (record) => {
+    if (!record) return;
+    const openId = String(record.openId || "").trim();
+    const username = String(record.username || "").trim();
+    const name = String(record.name || "").trim();
+    const normalized = {
+      openId,
+      username: username || name || openId,
+      name: name || username || openId,
+    };
+    if (normalized.openId) byOpenId.set(normalized.openId, normalized);
+    if (normalized.username) byUsername.set(normalized.username.toLowerCase(), normalized);
+  };
+
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) {
+    return { allowAll: false, byOpenId, byUsername };
+  }
+  if (trimmed === "*" || trimmed.toLowerCase() === "all") {
+    return { allowAll: true, byOpenId, byUsername };
+  }
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (e) {
+    parsed = null;
+  }
+
+  if (Array.isArray(parsed)) {
+    for (const entry of parsed) {
+      if (typeof entry === "string") {
+        addRecord(normalizeAuthRecord(parseWhitelistString(entry)));
+      } else if (entry && typeof entry === "object") {
+        addRecord(normalizeAuthRecord(entry));
+      }
+    }
+  } else if (parsed && typeof parsed === "object") {
+    for (const [key, value] of Object.entries(parsed)) {
+      if (value && typeof value === "object") {
+        addRecord(normalizeAuthRecord({ openId: value.openId || key, ...value }));
+      } else if (typeof value === "string") {
+        addRecord(normalizeAuthRecord({ openId: key, name: value, username: value }));
+      } else {
+        addRecord(normalizeAuthRecord({ openId: key }));
+      }
+    }
+  } else {
+    const entries = trimmed
+      .split(/[\n,]+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    for (const entry of entries) {
+      addRecord(normalizeAuthRecord(parseWhitelistString(entry)));
+    }
+  }
+
+  return { allowAll: false, byOpenId, byUsername };
+}
+
+function parseWhitelistString(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const pipeParts = raw.split("|").map((part) => part.trim()).filter(Boolean);
+  const parts = pipeParts.length > 1 ? pipeParts : raw.split(":").map((part) => part.trim()).filter(Boolean);
+  if (!parts.length) return null;
+  if (parts.length === 1) {
+    return { openId: parts[0] };
+  }
+  return { openId: parts[0], username: parts[1], name: parts[2] || parts[1] };
+}
+
+function resolveAuthUser({ openId, username, name } = {}) {
+  const normalizedOpenId = String(openId || "").trim();
+  const normalizedUsername = String(username || "").trim();
+  const normalizedName = String(name || "").trim();
+
+  if (authWhitelist.allowAll) {
+    const fallback = normalizedName || normalizedUsername || normalizedOpenId;
+    if (!fallback) return null;
+    return {
+      openId: normalizedOpenId,
+      username: normalizedUsername || fallback,
+      name: normalizedName || normalizedUsername || fallback,
+    };
+  }
+
+  if (normalizedOpenId && authWhitelist.byOpenId.has(normalizedOpenId)) {
+    return authWhitelist.byOpenId.get(normalizedOpenId);
+  }
+  const byUsername =
+    (normalizedUsername && authWhitelist.byUsername.get(normalizedUsername.toLowerCase())) ||
+    (normalizedName && authWhitelist.byUsername.get(normalizedName.toLowerCase()));
+  return byUsername || null;
+}
+
+function extractAuthParams(req) {
+  const body = req.body || {};
+  const query = req.query || {};
+  const openId =
+    body.openId ??
+    body.open_id ??
+    body.openID ??
+    query.openId ??
+    query.open_id ??
+    query.openID ??
+    "";
+  const username = body.username ?? body.user ?? body.account ?? query.username ?? query.user ?? query.account ?? "";
+  const name = body.name ?? body.displayName ?? body.realName ?? query.name ?? query.displayName ?? query.realName ?? "";
+  const redirect = body.redirect ?? query.redirect ?? "";
+  return {
+    openId: String(openId || "").trim(),
+    username: String(username || "").trim(),
+    name: String(name || "").trim(),
+    redirect: String(redirect || "").trim(),
+  };
 }
 
 async function getJsapiTicket(userAccessToken) {
@@ -224,6 +461,106 @@ app.get("/api/debug-env", (req, res) => {
 
 });
 
+// ====== Auth link ======
+const issueAuthLink = (req, res) => {
+  if (!AUTH_LINK_SECRET) {
+    return res.status(500).json({ success: false, error: "FEISHU_AUTH_LINK_SECRET not configured" });
+  }
+  if (!authWhitelist.allowAll && authWhitelist.byOpenId.size === 0 && authWhitelist.byUsername.size === 0) {
+    return res.status(403).json({ success: false, error: "auth whitelist not configured" });
+  }
+  const { openId, username, name, redirect } = extractAuthParams(req);
+  const user = resolveAuthUser({ openId, username, name });
+  if (!user) {
+    return res.status(403).json({ success: false, error: "user not in whitelist" });
+  }
+  const { token, payload } = issueAuthToken(user);
+  const url = buildAuthLink(req, token, redirect);
+  if (!url) {
+    return res.status(500).json({ success: false, error: "unable to build login link" });
+  }
+  return res.json({
+    success: true,
+    data: {
+      url,
+      token,
+      expiresAt: payload.exp,
+      user,
+    },
+  });
+};
+
+app.post("/api/auth/link", issueAuthLink);
+app.get("/api/auth/link", issueAuthLink);
+
+app.post("/api/auth/send-link", async (req, res) => {
+  if (!AUTH_LINK_SECRET) {
+    return res.status(500).json({ success: false, error: "FEISHU_AUTH_LINK_SECRET not configured" });
+  }
+  if (!authWhitelist.allowAll && authWhitelist.byOpenId.size === 0 && authWhitelist.byUsername.size === 0) {
+    return res.status(403).json({ success: false, error: "auth whitelist not configured" });
+  }
+  const { openId, username, name, redirect } = extractAuthParams(req);
+  const user = resolveAuthUser({ openId, username, name });
+  if (!user) {
+    return res.status(403).json({ success: false, error: "user not in whitelist" });
+  }
+  if (!user.openId) {
+    return res.status(400).json({ success: false, error: "openId required to send message" });
+  }
+  const { token, payload } = issueAuthToken(user);
+  const url = buildAuthLink(req, token, redirect);
+  if (!url) {
+    return res.status(500).json({ success: false, error: "unable to build login link" });
+  }
+  const ttlMinutes =
+    Number.isFinite(AUTH_LINK_TTL_MINUTES) && AUTH_LINK_TTL_MINUTES > 0 ? AUTH_LINK_TTL_MINUTES : 10;
+  const message = `每日表单系统登录链接（${ttlMinutes}分钟内有效）：${url}`;
+  try {
+    const data = await sendMessageToUser(user.openId, message);
+    return res.json({
+      success: true,
+      data: {
+        url,
+        expiresAt: payload.exp,
+        openId: user.openId,
+        messageId: data?.message_id || null,
+      },
+    });
+  } catch (e) {
+    console.error("POST /api/auth/send-link failed:", e);
+    return res.status(500).json({ success: false, error: String(e) });
+  }
+});
+
+app.get("/api/auth/verify", (req, res) => {
+  if (!AUTH_LINK_SECRET) {
+    return res.status(500).json({ success: false, error: "FEISHU_AUTH_LINK_SECRET not configured" });
+  }
+  if (!authWhitelist.allowAll && authWhitelist.byOpenId.size === 0 && authWhitelist.byUsername.size === 0) {
+    return res.status(403).json({ success: false, error: "auth whitelist not configured" });
+  }
+  const token = String(req.query.token || "").trim();
+  if (!token) {
+    return res.status(400).json({ success: false, error: "missing token" });
+  }
+  const verified = verifyAuthToken(token);
+  if (!verified) {
+    return res.status(401).json({ success: false, error: "invalid token" });
+  }
+  const user = verified.user;
+  const id = user.openId ? `feishu-${user.openId}` : `user-${user.username || "unknown"}`;
+  return res.json({
+    success: true,
+    data: {
+      id,
+      username: user.username || user.openId,
+      name: user.name || user.username || user.openId,
+      openId: user.openId || "",
+    },
+  });
+});
+
 // ====== 定时提醒：每日表单 ======
 app.get("/api/notify/daily", async (req, res) => {
   try {
@@ -247,6 +584,12 @@ app.get("/api/notify/daily", async (req, res) => {
     }
 
     const title = String(req.query.title || "每日表单填写链接").trim();
+    const loginRedirect = String(req.query.loginRedirect || req.query.redirect || "").trim();
+    const ttlMinutes =
+      Number.isFinite(AUTH_LINK_TTL_MINUTES) && AUTH_LINK_TTL_MINUTES > 0 ? AUTH_LINK_TTL_MINUTES : 10;
+    const canIssueLoginLink =
+      Boolean(AUTH_LINK_SECRET) &&
+      (authWhitelist.allowAll || authWhitelist.byOpenId.size > 0 || authWhitelist.byUsername.size > 0);
 
     const openIdQuery =
       req.query.openIds ??
@@ -278,11 +621,29 @@ app.get("/api/notify/daily", async (req, res) => {
     } else if (title.includes("每日表单")) {
       text = `请进入AI策略 DAILY或点击链接中的"每日表单"进行填写：${url}`;
     }
+    const defaultRedirect = loginRedirect || (title.includes("提醒预览") ? "/app/reminders" : title.includes("每日表单") ? "/app/daily" : "/app");
     const results = [];
     for (const openId of openIds) {
       try {
-        const data = await sendMessageToUser(openId, text);
-        results.push({ openId, success: true, data });
+        let loginUrl = "";
+        let loginError = null;
+        if (canIssueLoginLink) {
+          const user = resolveAuthUser({ openId });
+          if (user) {
+            const { token } = issueAuthToken(user);
+            loginUrl = buildAuthLink(req, token, defaultRedirect);
+            if (!loginUrl) loginError = "unable to build login link";
+          } else {
+            loginError = "user not in whitelist";
+          }
+        } else {
+          loginError = "auth link not configured";
+        }
+        const message = loginUrl
+          ? `${text}\n登录链接（${ttlMinutes}分钟内有效）：${loginUrl}`
+          : text;
+        const data = await sendMessageToUser(openId, message);
+        results.push({ openId, success: true, data, loginUrl: loginUrl || null, loginError });
       } catch (e) {
         results.push({ openId, success: false, error: String(e) });
       }
@@ -1692,6 +2053,16 @@ app.post("/api/projects", async (req, res) => {
       return setField(key, value);
     };
 
+    const normalizeFollowUpValue = (value) => {
+      if (value === true || value === false) return value;
+      const raw = String(value ?? "").trim();
+      if (!raw) return undefined;
+      const lower = raw.toLowerCase();
+      if (["是", "true", "1", "yes", "y"].includes(lower)) return true;
+      if (["否", "false", "0", "no", "n"].includes(lower)) return false;
+      return undefined;
+    };
+
 
 
     setField("projectName", projectName);
@@ -1721,7 +2092,7 @@ app.post("/api/projects", async (req, res) => {
 
     setField("lastUpdateDate", body.lastUpdateDate);
 
-    setField("isFollowedUp", body.isFollowedUp);
+    setField("isFollowedUp", normalizeFollowUpValue(body.isFollowedUp));
 
     if (body.expectedAmount !== undefined && body.expectedAmount !== null && body.expectedAmount !== "") {
 
@@ -2451,6 +2822,15 @@ app.post("/api/deals", async (req, res) => {
     const items = await listFields({ appToken: DEAL_APP_TOKEN, tableId: DEAL_TABLE_ID });
 
     const fieldNames = new Set((items || []).map((f) => f.field_name));
+    const fieldInfoMap = new Map();
+    (items || []).forEach((f) => {
+      if (!f?.field_name) return;
+      fieldInfoMap.set(normalizeFieldName(f.field_name), {
+        name: f.field_name,
+        type: f.type,
+        options: Array.isArray(f?.property?.options) ? f.property.options : [],
+      });
+    });
 
     const warnings = [];
 
@@ -2522,7 +2902,10 @@ app.post("/api/deals", async (req, res) => {
 
     const finishedFieldName = findFieldName("是否完结");
     if (finishedFieldName) {
-      setIf(finishedFieldName, body.isFinished);
+      const finishedValue = normalizeFinishedValue(body.isFinished);
+      if (finishedValue) {
+        setSelectField(finishedFieldName, finishedValue);
+      }
     } else if (body.isFinished !== undefined && body.isFinished !== null) {
       warnings.push("field not found: 是否完结");
     }
@@ -2729,9 +3112,30 @@ app.put("/api/deals/:dealId", async (req, res) => {
       return null;
     };
 
+    const getFieldInfo = (name) =>
+      fieldInfoMap.get(normalizeFieldName(name)) || { name, type: null, options: [] };
 
+    const setSelectField = (name, value) => {
+      const info = getFieldInfo(name);
+      if (!fieldNames.has(info.name)) {
+        warnings.push(`field not found: ${name}`);
+        return;
+      }
+      const optionName = resolveSelectOptionName(info, value);
+      const selectValue = toSelectValue(optionName, info.type);
+      setIf(info.name, selectValue);
+    };
 
-
+    const normalizeFinishedValue = (value) => {
+      if (value === true) return "是";
+      if (value === false) return "否";
+      const raw = String(value ?? "").trim();
+      if (!raw) return "";
+      const lower = raw.toLowerCase();
+      if (["true", "yes", "y", "1"].includes(lower)) return "是";
+      if (["false", "no", "n", "0"].includes(lower)) return "否";
+      return raw;
+    };
     
 
     const setIf = (name, value) => {

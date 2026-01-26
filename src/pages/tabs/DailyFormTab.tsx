@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Check, ChevronRight, Clock, FolderPlus, Plus, UserPlus } from "lucide-react";
+import { Check, ChevronRight, ClipboardList, Clock, FolderPlus, Plus, UserPlus } from "lucide-react";
 
 import { dataService } from "@/services/dataService";
 import type { Client, Project } from "@/types/bd";
@@ -741,6 +741,15 @@ export default function DailyFormTab() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 p-6">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <ClipboardList className="h-5 w-5" />
+            每日表单
+          </CardTitle>
+          <CardDescription>录入新增客户、更新项目与项目商务时间，提交后自动同步飞书数据表。</CardDescription>
+        </CardHeader>
+      </Card>
       <StepIndicator />
 
       {currentStep === 1 && (

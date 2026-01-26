@@ -1,44 +1,42 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { LogIn, User, Lock } from 'lucide-react';
 
 const Login: React.FC = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const [status, setStatus] = useState<'idle' | 'verifying' | 'error'>('idle');
+  const { loginWithToken } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+  const redirect = searchParams.get('redirect');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!username || !password) {
-      toast.error('请输入账号和密码');
+  useEffect(() => {
+    if (!token) {
+      setStatus('idle');
       return;
     }
-
-    setIsLoading(true);
-    
-    // 模拟登录延迟
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const success = login(username, password);
-    
-    if (success) {
-      toast.success('登录成功');
-      navigate('/');
-    } else {
-      toast.error('登录失败，请重试');
-    }
-    
-    setIsLoading(false);
-  };
+    let isActive = true;
+    const verify = async () => {
+      setStatus('verifying');
+      const success = await loginWithToken(token);
+      if (!isActive) return;
+      if (success) {
+        toast.success('登录成功');
+        const from = (location.state as any)?.from?.pathname;
+        navigate(redirect || from || '/app', { replace: true });
+      } else {
+        toast.error('登录链接无效或无权限');
+        setStatus('error');
+      }
+    };
+    void verify();
+    return () => {
+      isActive = false;
+    };
+  }, [token, loginWithToken, navigate, redirect, location.state]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -57,73 +55,22 @@ const Login: React.FC = () => {
 
         <Card className="border-border shadow-lg">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-xl">登录</CardTitle>
-            <CardDescription>输入您的账号和密码登录系统</CardDescription>
+            <CardTitle className="text-xl">飞书链接登录</CardTitle>
+            <CardDescription>请从飞书机器人消息中打开专属链接完成登录</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="username">账号</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="username"
-                    type="text"
-                    placeholder="请输入账号"
-                    value={username}
-                    onChange={e => setUsername(e.target.value)}
-                    className="pl-10"
-                    autoComplete="username"
-                  />
-                </div>
+            <div className="space-y-4">
+              <div className="rounded-lg border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+                {token
+                  ? status === 'error'
+                    ? '登录链接无效或已过期，请从飞书机器人获取新链接。'
+                    : '正在验证飞书登录链接，请稍候...'
+                  : '未检测到登录链接，请从飞书机器人消息中点击专属链接。'}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">密码</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="请输入密码"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    className="pl-10"
-                    autoComplete="current-password"
-                  />
-                </div>
-              </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="none"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    登录中...
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    <LogIn className="h-4 w-4" />
-                    登录
-                  </span>
-                )}
-              </Button>
-            </form>
+            </div>
             <div className="mt-6 rounded-lg bg-muted p-4">
               <p className="text-center text-sm text-muted-foreground">
-                当前仅允许指定BD账号登录
+                当前仅允许白名单用户通过飞书链接进入
               </p>
             </div>
           </CardContent>

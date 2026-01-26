@@ -157,6 +157,7 @@ const RemindersTab: React.FC = () => {
       if (success) {
         toast.success('已确认跟进，项目从列表中移除');
         removeReminderByProjectId(projectId);
+        await loadReminders();
       } else {
         toast.error('确认跟进失败');
       }
@@ -865,20 +866,21 @@ const RemindersTab: React.FC = () => {
               </div>
               <div>
                 <p className="font-medium mb-1">签单未立项项目：</p>
-                <div className="ml-2 text-xs text-muted-foreground">
-                  含税收入为空 且 立项创建时间超过 1 个工作日 → 未走立项流程
-                </div>
-                <div className="ml-2 text-xs text-muted-foreground">是否完结 = 丢单 → 不提醒</div>
+                <ul className="list-disc list-inside ml-2 space-y-0.5">
+                  <li>
+                    <strong>含税收入为空</strong> 且 <strong>立项创建时间超过 1 个工作日</strong> → 未走立项流程
+                  </li>
+                </ul>
                 <p className="font-medium mt-3">已立项项目：</p>
                 <ul className="list-disc list-inside ml-2 space-y-0.5">
-                  <li>确认已跟进后，4 个自然日内不再提醒</li>
-                  <li>4 天到期且未更新 → 恢复按结束时间判断</li>
-                  <li>结束时间 = 今日 → 黄色提醒</li>
-                  <li>已过结束时间 → 红色提醒</li>
+                  <li><strong>确认已跟进</strong> 后，<strong>4 个自然日</strong> 内不再提醒</li>
+                  <li><strong>4 天到期且未更新</strong> → 恢复按结束时间判断</li>
+                  <li><strong>结束时间 = 今日</strong> → 黄色提醒</li>
+                  <li><strong>已过结束时间</strong> → 红色提醒</li>
                 </ul>
               </div>
             </div>
-            <p className="mt-3">📢 <strong>飞书通知：</strong>系统将在每日早上 10:00 向各 AI策略 发送汇总提醒（当前为模拟功能）</p>
+            <p className="mt-3">📢 <strong>飞书通知：</strong>系统将在每日早上 10:00 向 BD 发送汇总提醒</p>
           </div>
         </CardContent>
       </Card>

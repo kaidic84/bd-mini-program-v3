@@ -1,8 +1,9 @@
 import React from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LayoutGrid } from "lucide-react";
 
 const KanbanTab: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
@@ -37,12 +38,13 @@ const KanbanTab: React.FC = () => {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle>飞书看板</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <LayoutGrid className="h-5 w-5" />
+            看板视图
+          </CardTitle>
+          <CardDescription>实时查看飞书看板的分组进度与关键流转，无需额外登录即可浏览。</CardDescription>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          当前视图来自飞书看板嵌套页面，无需额外登录即可查看。
-        </CardContent>
       </Card>
 
       {loading && <Skeleton className="h-[60vh] w-full rounded-2xl" />}

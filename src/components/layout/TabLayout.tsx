@@ -51,6 +51,8 @@ const tabs: TabItem[] = [
   { key: "reminders", label: "提醒预览", icon: Bell },
 ];
 
+const FULL_ACCESS_USERS = new Set(["袁晓南", "邹思敏", "黄毅", "侯昭薇", "陈凯蒂"]);
+
 interface OverviewCounts {
   newClients: number;
   newProjects: number;
@@ -79,7 +81,7 @@ const HomeOverview: React.FC<HomeOverviewProps> = ({
       </div>
       <div className="space-y-1">
         <div className="text-sm text-muted-foreground">您好，{userName}</div>
-        <h1 className="font-display text-3xl sm:text-4xl">AI策略 日常小程序</h1>
+        <h1 className="font-display text-3xl sm:text-4xl">售前 小程序</h1>
         <p className="text-sm text-muted-foreground">项目更新、立项进度、提醒同步，一屏掌控</p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -158,6 +160,14 @@ const TabLayout: React.FC = () => {
     day: "numeric",
   });
   const isHome = location.pathname === "/app" || location.pathname === "/app/";
+  const userName = String(user?.name || "").trim();
+  const hasFullAccess = FULL_ACCESS_USERS.has(userName);
+  const defaultPath = hasFullAccess ? "/app" : "/app/kanban";
+  const allowedTabs = hasFullAccess
+    ? tabs
+    : tabs.filter((tab) => tab.key === "kanban" || tab.key === "business");
+  const guardRoute = (key: TabKey, element: React.ReactElement) =>
+    hasFullAccess || key === "kanban" || key === "business" ? element : <Navigate to={defaultPath} replace />;
 
   React.useEffect(() => {
     let isActive = true;
@@ -201,9 +211,9 @@ const TabLayout: React.FC = () => {
               </div>
               <div className="flex flex-col leading-tight">
                 <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                  Daily Flow
+                  橙果视界
                 </span>
-                <span className="font-display text-sm text-foreground">AI策略 日常小程序</span>
+                <span className="font-display text-sm text-foreground">售前 小程序</span>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -245,21 +255,25 @@ const TabLayout: React.FC = () => {
                 <Route
                   index
                   element={
-                    <HomeOverview
-                      userName={user?.name || "伙伴"}
-                      todayLabel={todayLabel}
-                      overviewCounts={overviewCounts}
-                    />
+                    hasFullAccess ? (
+                      <HomeOverview
+                        userName={user?.name || "伙伴"}
+                        todayLabel={todayLabel}
+                        overviewCounts={overviewCounts}
+                      />
+                    ) : (
+                      <Navigate to={defaultPath} replace />
+                    )
                   }
                 />
 
-                <Route path="business" element={<BusinessDataTab />} />
-                <Route path="kanban" element={<KanbanTab />} />
-                <Route path="clients" element={<ClientsTab />} />
-                <Route path="projects" element={<ProjectsTab />} />
-                <Route path="deals" element={<DealsTab />} />
-                <Route path="daily" element={<DailyFormTab />} />
-                <Route path="reminders" element={<RemindersTab />} />
+                <Route path="business" element={guardRoute("business", <BusinessDataTab />)} />
+                <Route path="kanban" element={guardRoute("kanban", <KanbanTab />)} />
+                <Route path="clients" element={guardRoute("clients", <ClientsTab />)} />
+                <Route path="projects" element={guardRoute("projects", <ProjectsTab />)} />
+                <Route path="deals" element={guardRoute("deals", <DealsTab />)} />
+                <Route path="daily" element={guardRoute("daily", <DailyFormTab />)} />
+                <Route path="reminders" element={guardRoute("reminders", <RemindersTab />)} />
 
                 <Route path="*" element={<Navigate to="/app" replace />} />
               </Routes>
@@ -268,8 +282,13 @@ const TabLayout: React.FC = () => {
         </div>
       </main>
 
-      <nav className="miniapp-tabbar">
-        {tabs.map((tab) => {
+      <nav
+        className={cn(
+          "miniapp-tabbar",
+          allowedTabs.length <= 2 && "miniapp-tabbar--compact"
+        )}
+      >
+        {allowedTabs.map((tab) => {
           const Icon = tab.icon;
           return (
             <NavLink

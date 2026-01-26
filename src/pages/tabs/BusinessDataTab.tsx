@@ -1,8 +1,8 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, FolderKanban, FileCheck } from "lucide-react";
+import { Database, Users, FolderKanban, FileCheck } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 const BusinessDataTab: React.FC = () => {
@@ -32,12 +32,13 @@ const BusinessDataTab: React.FC = () => {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle>业务数据</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Database className="h-5 w-5" />
+            业务数据
+          </CardTitle>
+          <CardDescription>汇总客户、项目与立项核心信息，快速进入对应数据模块。</CardDescription>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          请选择要查看的业务数据类型
-        </CardContent>
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-2">

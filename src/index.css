@@ -252,6 +252,11 @@
     box-shadow: 0 28px 45px -32px rgba(0, 0, 0, 0.9);
   }
 
+  .miniapp-tabbar--compact {
+    @apply grid-cols-2;
+    width: min(360px, calc(100% - 3rem));
+  }
+
   .miniapp-tab {
     @apply flex flex-col items-center justify-center gap-1 rounded-full px-2 py-2 text-[11px] font-medium transition-colors;
     color: hsl(var(--foreground) / 0.6);

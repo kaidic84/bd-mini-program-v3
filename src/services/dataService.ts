@@ -114,11 +114,32 @@ const saveFollowUpOverrides = (data: Record<string, string>) => {
   }
 };
 
+const formatOverrideDate = (value: Date) => {
+  const yyyy = value.getFullYear();
+  const mm = String(value.getMonth() + 1).padStart(2, '0');
+  const dd = String(value.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const parseOverrideDate = (raw: string | undefined | null) => {
+  const value = String(raw ?? '').trim();
+  if (!value) return null;
+  if (/^\d{10,13}$/.test(value)) {
+    const num = Number(value);
+    if (Number.isFinite(num)) {
+      const ms = value.length === 10 ? num * 1000 : num;
+      const d = new Date(ms);
+      return Number.isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+  }
+  return parseDate(value);
+};
+
 const setFollowUpOverride = (projectId: string, when: Date = new Date()) => {
   const id = String(projectId || '').trim();
   if (!id) return;
   const overrides = loadFollowUpOverrides();
-  overrides[id] = String(when.getTime());
+  overrides[id] = formatOverrideDate(when);
   saveFollowUpOverrides(overrides);
 };
 
@@ -548,7 +569,7 @@ export const dataService = {
           projectNameNormalizedMap.get(normalizeName(projectName));
         const followUpFlag = Boolean(p?.isFollowedUp);
         const overrideRaw = followUpOverrides[String(projectId || p?.projectId || '').trim() || ''];
-        const overrideDate = overrideRaw ? parseDate(overrideRaw) : null;
+        const overrideDate = overrideRaw ? parseOverrideDate(overrideRaw) : null;
         const lastUpdateDate = p?.lastUpdateDate ? parseDate(p.lastUpdateDate) : null;
         let followUpStart: Date | null = null;
         if (followUpFlag && lastUpdateDate) followUpStart = lastUpdateDate;
