@@ -71,9 +71,9 @@ const HomeOverview: React.FC<HomeOverviewProps> = ({
   todayLabel,
   overviewCounts,
 }) => (
-  <section className="relative overflow-hidden rounded-[28px] border border-border/60 bg-black/50 p-6 text-foreground shadow-[0_35px_70px_-50px_rgba(0,0,0,0.9)] backdrop-blur">
-    <div className="pointer-events-none absolute -right-16 -top-12 h-56 w-56 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(255,199,132,0.8),transparent_70%)] opacity-70" />
-    <div className="pointer-events-none absolute -bottom-24 -left-10 h-52 w-52 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(122,196,255,0.55),transparent_70%)] opacity-60" />
+  <section className="relative overflow-hidden rounded-[28px] border border-border/60 bg-black/45 p-6 text-foreground shadow-[0_35px_70px_-50px_rgba(0,0,0,0.9)] backdrop-blur">
+    <div className="pointer-events-none absolute -right-16 -top-12 h-56 w-56 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(255,188,120,0.75),transparent_70%)] opacity-70" />
+    <div className="pointer-events-none absolute -bottom-24 -left-10 h-52 w-52 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(255,140,92,0.45),transparent_70%)] opacity-60" />
     <div className="relative z-10 flex flex-col gap-4">
       <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
         <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_14px_rgba(255,185,90,0.7)]" />
@@ -81,13 +81,13 @@ const HomeOverview: React.FC<HomeOverviewProps> = ({
       </div>
       <div className="space-y-1">
         <div className="text-sm text-muted-foreground">您好，{userName}</div>
-        <h1 className="font-display text-3xl sm:text-4xl">售前 小程序</h1>
+        <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl">售前 小程序</h1>
         <p className="text-sm text-muted-foreground">项目更新、立项进度、提醒同步，一屏掌控</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <span className="miniapp-chip">每日 10:00 提醒</span>
         <span className="miniapp-chip">飞书同步</span>
-        <span className="miniapp-chip">移动优先</span>
+        <span className="miniapp-chip">桌面优先</span>
       </div>
     </div>
 
@@ -122,7 +122,6 @@ const HomeOverview: React.FC<HomeOverviewProps> = ({
       <div className="miniapp-scorecard">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>快捷入口</span>
-          <span>常用</span>
         </div>
         <div className="mt-3 grid gap-3">
           <NavLink to="daily" className="miniapp-quick">
@@ -159,7 +158,9 @@ const TabLayout: React.FC = () => {
     month: "long",
     day: "numeric",
   });
-  const isHome = location.pathname === "/app" || location.pathname === "/app/";
+  const normalizedPath = location.pathname.replace(/\/$/, "");
+  const isHome = normalizedPath === "/app";
+  const isBusinessChild = ["/app/clients", "/app/projects", "/app/deals"].includes(normalizedPath);
   const userName = String(user?.name || "").trim();
   const hasFullAccess = FULL_ACCESS_USERS.has(userName);
   const defaultPath = hasFullAccess ? "/app" : "/app/kanban";
@@ -199,7 +200,7 @@ const TabLayout: React.FC = () => {
       <div className="pointer-events-none miniapp-orb miniapp-orb-cool" aria-hidden />
 
       <header className="sticky top-0 z-40">
-        <div className="mx-auto max-w-6xl px-4 pt-4">
+        <div className="mx-auto max-w-7xl px-6 pt-6 sm:px-8 lg:px-10">
           <div className="miniapp-topbar">
             <div className="flex items-center gap-3">
               <div className="flex h-10 items-center justify-center">
@@ -234,19 +235,19 @@ const TabLayout: React.FC = () => {
         </div>
       </header>
 
-      <main className="relative z-10 flex-1 pb-28">
-        <div className="mx-auto max-w-6xl px-4 pb-10 pt-4">
+      <main className="relative z-10 flex-1 pb-32">
+        <div className="mx-auto max-w-7xl px-6 pb-12 pt-6 sm:px-8 lg:px-10">
           <div className="miniapp-stagger space-y-6">
             {!isHome && (
               <div className="flex items-center">
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => navigate("/app")}
+                  onClick={() => navigate(isBusinessChild ? "/app/business" : "/app")}
                   className="text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
                 >
                   <ArrowLeft className="h-4 w-4" />
-                  返回首页
+                  {isBusinessChild ? "返回" : "返回首页"}
                 </Button>
               </div>
             )}

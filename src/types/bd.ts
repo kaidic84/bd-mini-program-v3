@@ -178,6 +178,20 @@ export interface SignedReminderItem {
   lastUpdateDate?: string;
 }
 
+/** 代收款项目提醒项 */
+export interface ReceivableReminderItem {
+  projectId: string;
+  dealId: string;
+  projectName: string;
+  customerId?: string;
+  shortName: string;
+  bd?: string;
+  bdOpenId?: string;
+  firstPaymentDate?: string;
+  receivedAmount?: number;
+  remainingReceivable?: number;
+}
+
 /** 兼容旧代码的 ReminderItem */
 export interface ReminderItem {
   projectId: string;

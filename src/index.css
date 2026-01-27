@@ -6,95 +6,95 @@
 
 @layer base {
   :root {
-    --background: 222 28% 8%;
-    --foreground: 32 26% 86%;
+    --background: 24 22% 8%;
+    --foreground: 30 24% 92%;
 
-    --card: 225 22% 14%;
-    --card-foreground: 32 20% 90%;
+    --card: 24 24% 12%;
+    --card-foreground: 30 24% 92%;
 
-    --popover: 225 20% 16%;
-    --popover-foreground: 32 20% 90%;
+    --popover: 24 24% 14%;
+    --popover-foreground: 30 24% 92%;
 
-    --primary: 36 90% 55%;
-    --primary-foreground: 26 28% 14%;
+    --primary: 28 94% 56%;
+    --primary-foreground: 24 30% 12%;
 
-    --secondary: 225 16% 18%;
-    --secondary-foreground: 32 18% 90%;
+    --secondary: 24 18% 20%;
+    --secondary-foreground: 30 20% 88%;
 
-    --muted: 225 14% 20%;
-    --muted-foreground: 30 12% 60%;
+    --muted: 24 16% 22%;
+    --muted-foreground: 28 10% 64%;
 
-    --accent: 225 18% 22%;
-    --accent-foreground: 32 20% 92%;
+    --accent: 24 28% 20%;
+    --accent-foreground: 30 24% 92%;
 
-    --destructive: 0 72% 54%;
-    --destructive-foreground: 32 20% 92%;
+    --destructive: 0 70% 52%;
+    --destructive-foreground: 30 24% 92%;
 
-    --success: 150 50% 40%;
-    --success-foreground: 32 20% 92%;
+    --success: 152 45% 38%;
+    --success-foreground: 30 24% 92%;
 
-    --warning: 38 92% 55%;
-    --warning-foreground: 26 28% 14%;
+    --warning: 32 96% 52%;
+    --warning-foreground: 24 30% 12%;
 
-    --border: 225 14% 24%;
-    --input: 225 14% 24%;
-    --ring: 36 90% 55%;
+    --border: 24 16% 26%;
+    --input: 24 16% 26%;
+    --ring: 28 94% 56%;
 
-    --radius: 1.25rem;
+    --radius: 1.35rem;
 
-    --sidebar-background: 222 22% 9%;
-    --sidebar-foreground: 32 20% 85%;
-    --sidebar-primary: 36 90% 55%;
-    --sidebar-primary-foreground: 26 28% 14%;
-    --sidebar-accent: 225 20% 16%;
-    --sidebar-accent-foreground: 32 20% 88%;
-    --sidebar-border: 225 14% 22%;
-    --sidebar-ring: 36 90% 55%;
+    --sidebar-background: 24 22% 9%;
+    --sidebar-foreground: 30 20% 86%;
+    --sidebar-primary: 28 94% 56%;
+    --sidebar-primary-foreground: 24 30% 12%;
+    --sidebar-accent: 24 24% 16%;
+    --sidebar-accent-foreground: 30 22% 88%;
+    --sidebar-border: 24 16% 22%;
+    --sidebar-ring: 28 94% 56%;
   }
 
   .dark {
-    --background: 222 28% 8%;
-    --foreground: 32 26% 86%;
+    --background: 24 22% 8%;
+    --foreground: 30 24% 92%;
 
-    --card: 225 22% 14%;
-    --card-foreground: 32 20% 90%;
+    --card: 24 24% 12%;
+    --card-foreground: 30 24% 92%;
 
-    --popover: 225 20% 16%;
-    --popover-foreground: 32 20% 90%;
+    --popover: 24 24% 14%;
+    --popover-foreground: 30 24% 92%;
 
-    --primary: 36 90% 55%;
-    --primary-foreground: 26 28% 14%;
+    --primary: 28 94% 56%;
+    --primary-foreground: 24 30% 12%;
 
-    --secondary: 225 16% 18%;
-    --secondary-foreground: 32 18% 90%;
+    --secondary: 24 18% 20%;
+    --secondary-foreground: 30 20% 88%;
 
-    --muted: 225 14% 20%;
-    --muted-foreground: 30 12% 60%;
+    --muted: 24 16% 22%;
+    --muted-foreground: 28 10% 64%;
 
-    --accent: 225 18% 22%;
-    --accent-foreground: 32 20% 92%;
+    --accent: 24 28% 20%;
+    --accent-foreground: 30 24% 92%;
 
-    --destructive: 0 72% 54%;
-    --destructive-foreground: 32 20% 92%;
+    --destructive: 0 70% 52%;
+    --destructive-foreground: 30 24% 92%;
 
-    --success: 150 50% 40%;
-    --success-foreground: 32 20% 92%;
+    --success: 152 45% 38%;
+    --success-foreground: 30 24% 92%;
 
-    --warning: 38 92% 55%;
-    --warning-foreground: 26 28% 14%;
+    --warning: 32 96% 52%;
+    --warning-foreground: 24 30% 12%;
 
-    --border: 225 14% 24%;
-    --input: 225 14% 24%;
-    --ring: 36 90% 55%;
+    --border: 24 16% 26%;
+    --input: 24 16% 26%;
+    --ring: 28 94% 56%;
 
-    --sidebar-background: 222 22% 9%;
-    --sidebar-foreground: 32 20% 85%;
-    --sidebar-primary: 36 90% 55%;
-    --sidebar-primary-foreground: 26 28% 14%;
-    --sidebar-accent: 225 20% 16%;
-    --sidebar-accent-foreground: 32 20% 88%;
-    --sidebar-border: 225 14% 22%;
-    --sidebar-ring: 36 90% 55%;
+    --sidebar-background: 24 22% 9%;
+    --sidebar-foreground: 30 20% 86%;
+    --sidebar-primary: 28 94% 56%;
+    --sidebar-primary-foreground: 24 30% 12%;
+    --sidebar-accent: 24 24% 16%;
+    --sidebar-accent-foreground: 30 22% 88%;
+    --sidebar-border: 24 16% 22%;
+    --sidebar-ring: 28 94% 56%;
   }
 }
 
@@ -212,14 +212,15 @@
 
   .miniapp-bg {
     background:
-      radial-gradient(1200px 600px at 15% -10%, rgba(255, 201, 136, 0.28), transparent 60%),
-      radial-gradient(900px 500px at 85% 5%, rgba(120, 200, 255, 0.2), transparent 55%),
-      linear-gradient(180deg, #0b0e13 0%, #111722 55%, #0b0e13 100%);
+      radial-gradient(1200px 600px at 12% -12%, rgba(255, 168, 96, 0.26), transparent 60%),
+      radial-gradient(900px 520px at 90% 0%, rgba(255, 120, 64, 0.2), transparent 55%),
+      linear-gradient(180deg, #100a07 0%, #19110c 55%, #0f0a07 100%);
   }
 
   .miniapp-topbar {
     @apply flex items-center justify-between rounded-2xl border border-border/60 bg-black/40 px-4 py-3 text-foreground backdrop-blur;
-    box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.85);
+    background: linear-gradient(135deg, rgba(36, 22, 13, 0.82), rgba(18, 12, 8, 0.92));
+    box-shadow: 0 18px 40px -28px rgba(255, 134, 64, 0.35);
   }
 
   .miniapp-chip {
@@ -232,14 +233,14 @@
   .miniapp-scorecard {
     @apply rounded-2xl border px-5 py-4 text-card-foreground;
     border-color: hsl(var(--border) / 0.8);
-    background: linear-gradient(180deg, rgba(30, 37, 50, 0.96), rgba(21, 27, 38, 0.98));
-    box-shadow: 0 20px 50px -32px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(160deg, rgba(40, 26, 16, 0.96), rgba(24, 16, 10, 0.98));
+    box-shadow: 0 24px 60px -40px rgba(255, 118, 58, 0.25);
   }
 
   .miniapp-quick {
     @apply flex items-center gap-3 rounded-2xl border px-3 py-2 text-sm font-medium text-card-foreground transition-transform duration-200 hover:-translate-y-0.5;
     border-color: hsl(var(--border) / 0.8);
-    background: hsl(var(--card) / 0.85);
+    background: linear-gradient(135deg, hsl(var(--card) / 0.95), hsl(var(--card) / 0.8));
   }
 
   .miniapp-quick:hover {
@@ -249,7 +250,8 @@
   .miniapp-tabbar {
     @apply fixed bottom-4 left-1/2 z-50 grid -translate-x-1/2 grid-cols-4 gap-1 rounded-full border border-border/70 bg-black/70 p-2 backdrop-blur;
     width: min(520px, calc(100% - 2rem));
-    box-shadow: 0 28px 45px -32px rgba(0, 0, 0, 0.9);
+    background: linear-gradient(135deg, rgba(30, 19, 11, 0.86), rgba(16, 10, 6, 0.92));
+    box-shadow: 0 28px 60px -36px rgba(255, 128, 64, 0.3);
   }
 
   .miniapp-tabbar--compact {
@@ -266,6 +268,35 @@
     @apply bg-accent/60;
     color: hsl(var(--foreground) / 0.95);
     box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.8);
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.28), hsl(var(--primary) / 0.55));
+  }
+
+  @media (min-width: 1024px) {
+    .miniapp-topbar {
+      padding: 1.25rem 1.5rem;
+      border-radius: 1.75rem;
+    }
+
+    .miniapp-scorecard {
+      padding: 1.5rem;
+    }
+
+    .miniapp-tabbar {
+      bottom: 1.75rem;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      width: min(720px, calc(100% - 6rem));
+    }
+
+    .miniapp-tabbar--compact {
+      width: min(420px, calc(100% - 6rem));
+    }
+
+    .miniapp-tab {
+      font-size: 12px;
+      gap: 0.4rem;
+      padding: 0.55rem 0.85rem;
+    }
   }
 }
 
@@ -323,7 +354,7 @@
     height: 320px;
     top: -140px;
     left: -80px;
-    background: radial-gradient(circle at 30% 30%, rgba(255, 196, 122, 0.65), transparent 70%);
+    background: radial-gradient(circle at 30% 30%, rgba(255, 154, 92, 0.65), transparent 70%);
   }
 
   .miniapp-orb-cool {
@@ -331,7 +362,7 @@
     height: 260px;
     top: 40px;
     right: -90px;
-    background: radial-gradient(circle at 30% 30%, rgba(122, 196, 255, 0.55), transparent 70%);
+    background: radial-gradient(circle at 30% 30%, rgba(255, 206, 148, 0.45), transparent 70%);
     animation-delay: -6s;
   }
 

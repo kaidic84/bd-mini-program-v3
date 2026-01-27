@@ -747,7 +747,8 @@ export default function DailyFormTab() {
             <ClipboardList className="h-5 w-5" />
             每日表单
           </CardTitle>
-          <CardDescription>录入新增客户、更新项目与项目商务时间，提交后自动同步飞书数据表。</CardDescription>
+          <CardDescription>系统将在每个工作日 18:00 向 BD 发送每日表单填写提醒通知</CardDescription>
+          <CardDescription>录入新增/更新客户、项目与项目商务时间，提交后自动同步飞书数据表</CardDescription>
         </CardHeader>
       </Card>
       <StepIndicator />

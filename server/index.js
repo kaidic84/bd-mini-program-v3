@@ -2531,7 +2531,7 @@ const formatDateLoose = (v) => {
 };
 
 const DEAL_FIELD = {
-  serialNo: "编号",
+  serialNo: "立项编号",
   dealId: "立项ID",
   projectId: "项目ID",
   customerId: "客户ID",
@@ -2546,11 +2546,11 @@ const DEAL_FIELD = {
   incomeWithTax: "含税收入",
   incomeWithoutTax: "不含税收入",
   estimatedCost: "预估成本",
-  paidThirdPartyCost: "已付三方成本",
+  paidThirdPartyCost: "已付项目成本【三方】",
   receivedAmount: "已收金额",
   remainingReceivable: "剩余应收金额",
-  firstPaymentDate: "预计首款时间",
-  finalPaymentDate: "预计尾款时间",
+  firstPaymentDate: "预计下一次到款时间",
+  finalPaymentDate: "全款实际到款时间",
   grossProfit: "毛利",
   grossMargin: "毛利率",
   lastUpdateDate: "最后更新时间",
@@ -2567,14 +2567,40 @@ function mapDealRecord(it = {}) {
     return v ?? "";
   };
 
+  const pickFieldByIncludes = (fields, keywords) => {
+    const keys = Object.keys(fields || {});
+    for (const key of keys) {
+      const hit = keywords.every((word) => String(key).includes(word));
+      if (hit) return fields[key];
+    }
+    return undefined;
+  };
+
+  const pickFieldByKeywordSets = (fields, keywordSets) => {
+    for (const keywords of keywordSets) {
+      const hit = pickFieldByIncludes(fields, keywords);
+      if (hit !== undefined) return hit;
+    }
+    return undefined;
+  };
+
+  const normalizeNumber = (raw) => {
+    if (raw === null || raw === undefined || raw === "") return null;
+    if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+    const str = String(raw).replace(/[,\s¥￥]/g, "").trim();
+    if (!str) return null;
+    const num = Number(str);
+    return Number.isNaN(num) ? null : num;
+  };
+
   const pickNumber = (v) => {
+    if (v === null || v === undefined || v === "") return null;
     if (Array.isArray(v)) return pickNumber(v[0]);
     if (typeof v === "object" && v !== null) {
-      const num = Number(v?.value ?? v?.text ?? v?.name ?? v);
-      return Number.isNaN(num) ? 0 : num;
+      const raw = v?.value ?? v?.amount ?? v?.number ?? v?.text ?? v?.name ?? v;
+      return normalizeNumber(raw);
     }
-    const num = Number(v);
-    return Number.isNaN(num) ? 0 : num;
+    return normalizeNumber(v);
   };
 
   const normalizeAny = (v) => {
@@ -2589,7 +2615,7 @@ function mapDealRecord(it = {}) {
   };
 
   const result = {
-    serialNo: f[DEAL_FIELD.serialNo] || f.serialNo || "",
+    serialNo: f[DEAL_FIELD.serialNo] || f["编号"] || f.serialNo || "",
     dealId: f[DEAL_FIELD.dealId] || f.dealId || it.record_id || "",
     projectId: f[DEAL_FIELD.projectId] || f.projectId || "",
     customerId: f[DEAL_FIELD.customerId] || f.customerId || "",
@@ -2604,13 +2630,37 @@ function mapDealRecord(it = {}) {
     incomeWithTax: pickNumber(f[DEAL_FIELD.incomeWithTax] || f.incomeWithTax),
     incomeWithoutTax: pickNumber(f[DEAL_FIELD.incomeWithoutTax] || f.incomeWithoutTax),
     estimatedCost: pickNumber(f[DEAL_FIELD.estimatedCost] || f.estimatedCost),
-    paidThirdPartyCost: pickNumber(f[DEAL_FIELD.paidThirdPartyCost] || f.paidThirdPartyCost),
+    paidThirdPartyCost: pickNumber(
+      f[DEAL_FIELD.paidThirdPartyCost] ||
+      f["已付三方成本"] ||
+      f["已付项目成本（三方）"] ||
+      f["已付项目成本(三方)"] ||
+      f["已付项目成本（第三方）"] ||
+      pickFieldByIncludes(f, ["已付", "项目成本"]) ||
+      f.paidThirdPartyCost
+    ),
     receivedAmount: pickNumber(f[DEAL_FIELD.receivedAmount] || f.receivedAmount),
     remainingReceivable: pickNumber(f[DEAL_FIELD.remainingReceivable] || f.remainingReceivable),
     firstPaymentDate:
-      f[DEAL_FIELD.firstPaymentDate] || f["预计首款日期"] || f.firstPaymentDate || "",
+      f[DEAL_FIELD.firstPaymentDate] ||
+      f["预计下一次到款日期"] ||
+      f["预计下次到款时间"] ||
+      f["预计下次到款日期"] ||
+      f["预计首款时间"] ||
+      f["预计首款日期"] ||
+      pickFieldByKeywordSets(f, [["预计", "到款", "次"], ["预计", "到款", "首"]]) ||
+      f.firstPaymentDate ||
+      "",
     finalPaymentDate:
-      f[DEAL_FIELD.finalPaymentDate] || f["预计尾款日期"] || f.finalPaymentDate || "",
+      f[DEAL_FIELD.finalPaymentDate] ||
+      f["全款实际到款日期"] ||
+      f["实际到款时间"] ||
+      f["实际到款日期"] ||
+      f["预计尾款时间"] ||
+      f["预计尾款日期"] ||
+      pickFieldByKeywordSets(f, [["全款", "到款"], ["尾款", "到款"]]) ||
+      f.finalPaymentDate ||
+      "",
     grossProfit: pickNumber(f[DEAL_FIELD.grossProfit] || f.grossProfit),
     grossMargin: pickNumber(f[DEAL_FIELD.grossMargin] || f.grossMargin),
     lastUpdateDate: f[DEAL_FIELD.lastUpdateDate] || f.lastUpdateDate || "",
@@ -2874,9 +2924,19 @@ app.post("/api/deals", async (req, res) => {
 
     };
 
-
-
-
+    const setIfAlias = (names, value) => {
+      const isEmptyString = typeof value === "string" && value.trim() === "";
+      if (value === undefined || value === null || isEmptyString) return;
+      const target =
+        names
+          .map((name) => (fieldNames.has(name) ? name : findFieldName(name)))
+          .find(Boolean) || null;
+      if (!target) {
+        warnings.push(`field not found: ${names[0]}`);
+        return;
+      }
+      fields[target] = value;
+    };
 
     setIf("立项ID", dealId);
 
@@ -2925,9 +2985,15 @@ app.post("/api/deals", async (req, res) => {
 
       setIf("预估成本", Number(body.estimatedCost));
 
-    if (body.paidThirdPartyCost !== undefined && body.paidThirdPartyCost !== "")
-
-      setIf("已付三方成本", Number(body.paidThirdPartyCost));
+    if (body.paidThirdPartyCost !== undefined && body.paidThirdPartyCost !== "") {
+      const num = Number(body.paidThirdPartyCost);
+      if (Number.isFinite(num)) {
+        setIfAlias(
+          ["已付项目成本【三方】", "已付项目成本（三方）", "已付项目成本(三方)", "已付三方成本"],
+          num
+        );
+      }
+    }
 
     if (body.receivedAmount !== undefined && body.receivedAmount !== "")
 
@@ -2935,9 +3001,15 @@ app.post("/api/deals", async (req, res) => {
 
 
 
-    if (body.thirdPartyCost !== undefined && body.thirdPartyCost !== "")
-
-      setIf("已付三方成本", Number(body.thirdPartyCost));
+    if (body.thirdPartyCost !== undefined && body.thirdPartyCost !== "") {
+      const num = Number(body.thirdPartyCost);
+      if (Number.isFinite(num)) {
+        setIfAlias(
+          ["已付项目成本【三方】", "已付项目成本（三方）", "已付项目成本(三方)", "已付三方成本"],
+          num
+        );
+      }
+    }
 
     if (body.grossProfit !== undefined && body.grossProfit !== "")
 
@@ -2952,9 +3024,15 @@ app.post("/api/deals", async (req, res) => {
 
 
 
-    setIf("预计首款时间", toUnixTs(body.firstPaymentDate));
+    setIfAlias(
+      ["预计下一次到款时间", "预计下一次到款日期", "预计下次到款时间", "预计下次到款日期", "预计首款时间", "预计首款日期"],
+      toUnixTs(body.firstPaymentDate)
+    );
 
-    setIf("预计尾款时间", toUnixTs(body.finalPaymentDate));
+    setIfAlias(
+      ["全款实际到款时间", "全款实际到款日期", "实际到款时间", "实际到款日期", "预计尾款时间", "预计尾款日期"],
+      toUnixTs(body.finalPaymentDate)
+    );
 
 
 
@@ -3156,6 +3234,20 @@ app.put("/api/deals/:dealId", async (req, res) => {
 
     };
 
+    const setIfAlias = (names, value) => {
+      const isEmptyString = typeof value === "string" && value.trim() === "";
+      if (value === undefined || value === null || isEmptyString) return;
+      const target =
+        names
+          .map((name) => (fieldNames.has(name) ? name : findFieldName(name)))
+          .find(Boolean) || null;
+      if (!target) {
+        warnings.push(`field not found: ${names[0]}`);
+        return;
+      }
+      fields[target] = value;
+    };
+
 
 
 
@@ -3202,9 +3294,15 @@ app.put("/api/deals/:dealId", async (req, res) => {
 
       setIf("预估成本", Number(body.estimatedCost));
 
-    if (body.paidThirdPartyCost !== undefined && body.paidThirdPartyCost !== "")
-
-      setIf("已付三方成本", Number(body.paidThirdPartyCost));
+    if (body.paidThirdPartyCost !== undefined && body.paidThirdPartyCost !== "") {
+      const num = Number(body.paidThirdPartyCost);
+      if (Number.isFinite(num)) {
+        setIfAlias(
+          ["已付项目成本【三方】", "已付项目成本（三方）", "已付项目成本(三方)", "已付三方成本"],
+          num
+        );
+      }
+    }
 
     if (body.receivedAmount !== undefined && body.receivedAmount !== "")
 
@@ -3212,9 +3310,15 @@ app.put("/api/deals/:dealId", async (req, res) => {
 
 
 
-    if (body.thirdPartyCost !== undefined && body.thirdPartyCost !== "")
-
-      setIf("已付三方成本", Number(body.thirdPartyCost));
+    if (body.thirdPartyCost !== undefined && body.thirdPartyCost !== "") {
+      const num = Number(body.thirdPartyCost);
+      if (Number.isFinite(num)) {
+        setIfAlias(
+          ["已付项目成本【三方】", "已付项目成本（三方）", "已付项目成本(三方)", "已付三方成本"],
+          num
+        );
+      }
+    }
 
     if (body.grossProfit !== undefined && body.grossProfit !== "")
 
@@ -3229,9 +3333,15 @@ app.put("/api/deals/:dealId", async (req, res) => {
 
 
 
-    setIf("预计首款时间", toUnixTs(body.firstPaymentDate));
+    setIfAlias(
+      ["预计下一次到款时间", "预计下一次到款日期", "预计下次到款时间", "预计下次到款日期", "预计首款时间", "预计首款日期"],
+      toUnixTs(body.firstPaymentDate)
+    );
 
-    setIf("预计尾款时间", toUnixTs(body.finalPaymentDate));
+    setIfAlias(
+      ["全款实际到款时间", "全款实际到款日期", "实际到款时间", "实际到款日期", "预计尾款时间", "预计尾款日期"],
+      toUnixTs(body.finalPaymentDate)
+    );
 
 
 

@@ -337,75 +337,96 @@ const ClientsTab: React.FC = () => {
   };
 
   const selectedRelatedProjects = selectedClient ? getRelatedProjects(selectedClient) : [];
+  const controlClass = "h-[clamp(34px,3.2vw,44px)] text-[clamp(12px,1.1vw,14px)]";
+  const triggerClass = `${controlClass} w-auto min-w-[120px] px-3 whitespace-nowrap shrink-0`;
+  const triggerWideClass = `${controlClass} w-auto min-w-[140px] px-3 whitespace-nowrap shrink-0`;
+  const cardBaseClass =
+    "flex h-full min-h-[170px] flex-col justify-center gap-2 px-5 py-5 sm:min-h-[190px] sm:gap-3 sm:px-6 sm:py-6";
+  const cardTitleClass = "text-[clamp(14px,1.25vw,17px)] font-medium text-foreground leading-snug";
+  const cardSubClass = "text-[clamp(12px,1.05vw,14px)] text-muted-foreground";
+  const cardMetaClass = "text-[clamp(11px,1vw,13px)] text-muted-foreground";
+  const badgeTextClass = "text-[clamp(10px,0.9vw,12px)]";
+  const formatCurrency = (value?: number | string | null) => {
+    if (value === undefined || value === null || value === '') return '-';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '-';
+    const formatted = new Intl.NumberFormat('zh-CN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(num);
+    return `¥${formatted}`;
+  };
 
   return (
     <div className="space-y-4">
       {/* 筛选栏 */}
       <Card>
-        <CardContent className="pt-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="搜索客户名称..."
-                value={searchKeyword}
-                onChange={(e) => setSearchKeyword(e.target.value)}
-                className="pl-9"
-              />
-            </div>
+        <CardContent className="flex min-h-[88px] items-center p-4 sm:min-h-[96px] sm:p-5">
+          <div className="mx-auto w-full max-w-6xl">
+            <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+              <div className="relative w-full min-w-[240px] lg:flex-[1.15] lg:max-w-[560px]">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="搜索客户名称..."
+                  value={searchKeyword}
+                  onChange={(e) => setSearchKeyword(e.target.value)}
+                  className={`${controlClass} pl-9`}
+                />
+              </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Select value={annualFilter} onValueChange={setAnnualFilter}>
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="是否年框" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">是否年框</SelectItem>
-                  <SelectItem value="yes">年框</SelectItem>
-                  <SelectItem value="no">非年框</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={levelFilter} onValueChange={setLevelFilter}>
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="等级" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部等级</SelectItem>
-                  {levelOptions.map((lv) => (
-                    <SelectItem key={lv} value={lv}>
-                      {lv}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap items-center justify-center gap-3 lg:flex-1 lg:justify-end lg:gap-4">
+                <Select value={annualFilter} onValueChange={setAnnualFilter}>
+                  <SelectTrigger className={triggerClass}>
+                    <SelectValue placeholder="是否年框" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">是否年框</SelectItem>
+                    <SelectItem value="yes">年框</SelectItem>
+                    <SelectItem value="no">非年框</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={levelFilter} onValueChange={setLevelFilter}>
+                  <SelectTrigger className={triggerClass}>
+                    <SelectValue placeholder="等级" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部等级</SelectItem>
+                    {levelOptions.map((lv) => (
+                      <SelectItem key={lv} value={lv}>
+                        {lv}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <Select value={industryFilter} onValueChange={setIndustryFilter}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue placeholder="行业类别" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部行业</SelectItem>
-                  {industryOptions.map((i) => (
-                    <SelectItem key={i} value={i}>
-                      {i}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <Select value={industryFilter} onValueChange={setIndustryFilter}>
+                  <SelectTrigger className={triggerWideClass}>
+                    <SelectValue placeholder="行业类别" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部行业</SelectItem>
+                    {industryOptions.map((i) => (
+                      <SelectItem key={i} value={i}>
+                        {i}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <Select value={bdFilter} onValueChange={setBdFilter}>
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="AI策略" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部AI策略</SelectItem>
-                  {bdOptions.map((bd) => (
-                    <SelectItem key={bd} value={bd}>
-                      {bd}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <Select value={bdFilter} onValueChange={setBdFilter}>
+                  <SelectTrigger className={triggerWideClass}>
+                    <SelectValue placeholder="BD" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部BD</SelectItem>
+                    {bdOptions.map((bd) => (
+                      <SelectItem key={bd} value={bd}>
+                        {bd}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -428,21 +449,21 @@ const ClientsTab: React.FC = () => {
               className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50"
               onClick={() => handleClientClick(client)}
             >
-              <CardContent className="pt-4">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-foreground">
+              <CardContent className={cardBaseClass}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className={cardTitleClass}>
                         {client.shortName || "-"}
                       </h3>
                       <Badge
                         variant={getLevelBadgeVariant(client.level)}
-                        className="text-xs"
+                        className={cn("text-xs", badgeTextClass)}
                       >
                         {client.level || "-"}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className={cardSubClass}>
                       {client.companyName || "-"}
                     </p>
                   </div>
@@ -450,14 +471,14 @@ const ClientsTab: React.FC = () => {
                   {client.isAnnual && (
                     <Badge
                       variant="outline"
-                      className="text-xs bg-success/10 text-success border-success/30"
+                      className={cn("text-xs bg-success/10 text-success border-success/30", badgeTextClass)}
                     >
                       年框
                     </Badge>
                   )}
                 </div>
 
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <div className={cn("mt-2 flex flex-wrap gap-3", cardMetaClass)}>
                   <span className="flex items-center gap-1">
                     <Tag className="h-3 w-3" />
                     {client.industry || "-"}
@@ -472,7 +493,7 @@ const ClientsTab: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                <div className={cn("mt-1 flex items-center justify-between", cardMetaClass)}>
                   <span>关联项目: {relatedProjects.length} 个</span>
                   <span>{client.cooperationStatus || "-"}</span>
                 </div>
@@ -536,7 +557,7 @@ const ClientsTab: React.FC = () => {
                         <span>{selectedClient.hq || "-"}</span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">主AI策略：</span>
+                        <span className="text-muted-foreground">主BD：</span>
                         <span>{selectedClient.owner || "-"}</span>
                       </div>
                       <div>
@@ -638,7 +659,7 @@ const ClientsTab: React.FC = () => {
                   <span>{selectedProject.platform || selectedProject.deliverableName || "-"}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">AI策略：</span>
+                  <span className="text-muted-foreground">BD：</span>
                   <span>{selectedProject.bd || "-"}</span>
                 </div>
                 <div>
@@ -647,7 +668,7 @@ const ClientsTab: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-muted-foreground">预计金额：</span>
-                  <span>{selectedProject.expectedAmount ?? "-"}</span>
+                  <span>{formatCurrency(selectedProject.expectedAmount)}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">累计商务时间：</span>

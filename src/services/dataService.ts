@@ -18,6 +18,7 @@ import type {
   UnfinishedReminderItem,
   FinishedReminderItem,
   SignedReminderItem,
+  ReceivableReminderItem,
   ReminderLevel,
 } from '@/types/bd';
 
@@ -91,6 +92,7 @@ const resolveCustomerBdField = (data: Partial<Client> & { owner?: string; ownerB
 };
 
 const FOLLOW_UP_STORAGE_KEY = 'bd_follow_up_overrides';
+const RECEIVABLE_FOLLOW_UP_STORAGE_KEY = 'bd_receivable_follow_up_overrides';
 
 const loadFollowUpOverrides = (): Record<string, string> => {
   if (typeof window === 'undefined' || !window.localStorage) return {};
@@ -150,6 +152,45 @@ const clearFollowUpOverride = (projectId: string) => {
   if (!(id in overrides)) return;
   delete overrides[id];
   saveFollowUpOverrides(overrides);
+};
+
+const loadReceivableFollowUpOverrides = (): Record<string, string> => {
+  if (typeof window === 'undefined' || !window.localStorage) return {};
+  try {
+    const raw = window.localStorage.getItem(RECEIVABLE_FOLLOW_UP_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed as Record<string, string>;
+  } catch (e) {
+    return {};
+  }
+};
+
+const saveReceivableFollowUpOverrides = (data: Record<string, string>) => {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(RECEIVABLE_FOLLOW_UP_STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    // ignore storage errors
+  }
+};
+
+const setReceivableFollowUpOverride = (dealId: string, when: Date = new Date()) => {
+  const id = String(dealId || '').trim();
+  if (!id) return;
+  const overrides = loadReceivableFollowUpOverrides();
+  overrides[id] = formatOverrideDate(when);
+  saveReceivableFollowUpOverrides(overrides);
+};
+
+const clearReceivableFollowUpOverride = (dealId: string) => {
+  const id = String(dealId || '').trim();
+  if (!id) return;
+  const overrides = loadReceivableFollowUpOverrides();
+  if (!(id in overrides)) return;
+  delete overrides[id];
+  saveReceivableFollowUpOverrides(overrides);
 };
 
 export const dataService = {
@@ -677,6 +718,74 @@ export const dataService = {
       .filter(Boolean) as SignedReminderItem[];
   },
 
+  async getReceivableReminders(): Promise<ReceivableReminderItem[]> {
+    const [deals, projects, clients] = await Promise.all([
+      this.getAllDeals(),
+      this.getAllProjects(),
+      this.getAllClients(),
+    ]);
+    const today = new Date();
+    const followUpDelayDays = 4;
+    const followUpOverrides = loadReceivableFollowUpOverrides();
+    const projectMap = new Map(projects.map((p) => [String(p.projectId || '').trim(), p]));
+    const clientMap = new Map(
+      clients.map((c) => [String(c.customerId || c.id || '').trim(), c])
+    );
+
+    const normalizeNumber = (raw: unknown) => {
+      if (raw === null || raw === undefined || raw === '') return null;
+      if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+      const str = String(raw).replace(/[,\s¥￥]/g, '').trim();
+      if (!str) return null;
+      const num = Number(str);
+      return Number.isNaN(num) ? null : num;
+    };
+
+    return deals
+      .map((deal) => {
+        const remaining = normalizeNumber((deal as any).remainingReceivable);
+        if (!remaining || remaining <= 0) return null;
+
+        const projectId = String(deal.projectId || '').trim();
+        const project = projectMap.get(projectId);
+        const projectName =
+          project?.projectName || String(deal.projectName || '').trim() || deal.dealId;
+        const customerId = String(project?.customerId || deal.customerId || '').trim();
+        const client = clientMap.get(customerId);
+        const shortName = project?.shortName || client?.shortName || '';
+        const dealId = String(deal.dealId || '').trim();
+        const firstPaymentDate =
+          (deal as any).firstPaymentDate || (deal as any).first_payment_date || '';
+        const paymentDate = parseDate(firstPaymentDate);
+        if (!paymentDate) return null;
+        const dueDays = getDaysDiff(paymentDate, today);
+        if (dueDays < 0) return null;
+        const overrideRaw = followUpOverrides[dealId];
+        const overrideDate = overrideRaw ? parseOverrideDate(overrideRaw) : null;
+        const followUpAge = overrideDate ? getDaysDiff(overrideDate, today) : null;
+        const followUpActive = followUpAge !== null && followUpAge < followUpDelayDays;
+        if (followUpActive) return null;
+        if (overrideRaw && followUpAge !== null && followUpAge >= followUpDelayDays) {
+          clearReceivableFollowUpOverride(dealId);
+        }
+
+        return {
+          projectId: project?.projectId || projectId || dealId,
+          dealId,
+          projectName,
+          customerId: customerId || undefined,
+          shortName,
+          bd: project?.bd || '',
+          bdOpenId: project?.bdOpenId,
+          firstPaymentDate,
+          receivedAmount: normalizeNumber((deal as any).receivedAmount),
+          remainingReceivable: remaining,
+        } as ReceivableReminderItem;
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.remainingReceivable || 0) - (a.remainingReceivable || 0)) as ReceivableReminderItem[];
+  },
+
   async confirmFollowUp(projectId: string): Promise<boolean> {
     const now = new Date();
     const lastUpdateDate = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(
@@ -701,6 +810,18 @@ export const dataService = {
       return true;
     } catch (e) {
       console.error('[dataService] confirmFollowUp via backend failed:', e);
+      return false;
+    }
+  },
+
+  async confirmReceivableFollowUp(dealId: string): Promise<boolean> {
+    const id = String(dealId || '').trim();
+    if (!id) return false;
+    try {
+      setReceivableFollowUpOverride(id, new Date());
+      return true;
+    } catch (e) {
+      console.error('[dataService] confirmReceivableFollowUp failed:', e);
       return false;
     }
   },

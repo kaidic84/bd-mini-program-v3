@@ -30,7 +30,7 @@ const BusinessDataTab: React.FC = () => {
   ] as const;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -41,33 +41,38 @@ const BusinessDataTab: React.FC = () => {
         </CardHeader>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Card key={item.key} className="hover:border-primary/50 transition-colors">
-              <CardContent className="flex items-center justify-between gap-3 pt-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 rounded-md bg-primary/10 p-2 text-primary">
-                    <Icon className="h-5 w-5" />
+      <div className="flex min-h-[52vh] items-center">
+        <div className="mx-auto grid w-full max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Card
+                key={item.key}
+                className="group min-h-[150px] border-border/70 bg-card/80 transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-[0_22px_60px_-46px_rgba(255,140,72,0.45)]"
+              >
+                <CardContent className="flex h-full items-center justify-between gap-4 px-6 py-6 lg:px-7 lg:py-7">
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-2xl bg-primary/10 p-3 text-primary shadow-[inset_0_0_0_1px_rgba(255,156,88,0.25)]">
+                      <Icon className="h-6 w-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-base font-semibold">{item.label}</div>
+                      <div className="text-sm text-muted-foreground">{item.description}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-sm font-medium">{item.label}</div>
-                    <div className="text-xs text-muted-foreground">{item.description}</div>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/app/${item.key}`)}
-                >
-                  进入
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="default"
+                    onClick={() => navigate(`/app/${item.key}`)}
+                  >
+                    进入
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

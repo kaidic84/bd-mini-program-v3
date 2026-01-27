@@ -87,7 +87,6 @@ const ProjectsTab: React.FC = () => {
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [bdFilter, setBdFilter] = useState<string>('all');
   const [monthFilter, setMonthFilter] = useState<string>('all');
-  const [hoursSort, setHoursSort] = useState<string>('none');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showDetail, setShowDetail] = useState(false);
 
@@ -97,7 +96,7 @@ const ProjectsTab: React.FC = () => {
 
   useEffect(() => {
     filterProjects();
-  }, [projects, searchKeyword, stageFilter, typeFilter, serviceTypeFilter, priorityFilter, bdFilter, monthFilter, hoursSort]);
+  }, [projects, searchKeyword, stageFilter, typeFilter, serviceTypeFilter, priorityFilter, bdFilter, monthFilter]);
 
   const loadProjects = async () => {
     const data = await dataService.getAllProjects();
@@ -151,17 +150,6 @@ const ProjectsTab: React.FC = () => {
       result = result.filter((p) => Number(extractMonth(p.month)) === Number(monthFilter));
     }
 
-    if (hoursSort !== 'none') {
-      const getHours = (v: any) => {
-        const n = Number(v);
-        return Number.isFinite(n) ? n : 0;
-      };
-      result = result.sort((a, b) => {
-        const diff = getHours(a.totalBdHours) - getHours(b.totalBdHours);
-        return hoursSort === 'asc' ? diff : -diff;
-      });
-    }
-
     setFilteredProjects(result);
   };
 
@@ -185,112 +173,125 @@ const ProjectsTab: React.FC = () => {
     }
   };
 
+  const formatCurrency = (value?: number | string | null) => {
+    if (value === undefined || value === null || value === '') return '-';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '-';
+    const formatted = new Intl.NumberFormat('zh-CN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(num);
+    return `¥${formatted}`;
+  };
+
+  const controlClass = "h-[clamp(34px,3.2vw,44px)] text-[clamp(12px,1.1vw,14px)]";
+  const triggerClass = `${controlClass} w-auto min-w-[120px] px-3 whitespace-nowrap shrink-0`;
+  const triggerWideClass = `${controlClass} w-auto min-w-[140px] px-3 whitespace-nowrap shrink-0`;
+  const cardBaseClass =
+    "flex h-full min-h-[180px] flex-col justify-center gap-2 px-5 py-5 sm:min-h-[200px] sm:gap-3 sm:px-6 sm:py-6";
+  const cardTitleClass = "text-[clamp(14px,1.25vw,17px)] font-medium text-foreground leading-snug";
+  const cardMetaClass = "text-[clamp(11px,1vw,13px)] text-muted-foreground";
+  const badgeTextClass = "text-[clamp(10px,0.9vw,12px)]";
+
   return (
     <div className="space-y-4">
       {/** 月份选项改为 1-12 */}
       {/* 筛选栏 */}
       <Card>
-        <CardContent className="pt-4">
+        <CardContent className="flex min-h-[88px] items-center p-4 sm:min-h-[96px] sm:p-5">
           {/** 月份使用数字 1-12 */}
-          <div className="flex flex-col gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="搜索项目名称..."
-                value={searchKeyword}
-                onChange={(e) => setSearchKeyword(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Select value={stageFilter} onValueChange={setStageFilter}>
-                <SelectTrigger className="w-[110px]">
-                  <SelectValue placeholder="进度" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部进度</SelectItem>
-                  {PROJECT_STAGE_OPTIONS.map((stage) => (
-                    <SelectItem key={stage} value={stage}>
-                      {stage}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="类别" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部类别</SelectItem>
-                  {PROJECT_TYPE_OPTIONS.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={serviceTypeFilter} onValueChange={setServiceTypeFilter}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue placeholder="服务类型" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部服务</SelectItem>
-                  {SERVICE_TYPE_OPTIONS.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-                            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="优先级" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部优先级</SelectItem>
-                  {PROJECT_PRIORITY_OPTIONS.map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="mx-auto w-full max-w-6xl">
+            <div className="flex w-full flex-col gap-3">
+              <div className="relative w-full">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="搜索项目名称..."
+                  value={searchKeyword}
+                  onChange={(e) => setSearchKeyword(e.target.value)}
+                  className={`${controlClass} pl-9`}
+                />
+              </div>
+              <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <Select value={stageFilter} onValueChange={setStageFilter}>
+                  <SelectTrigger className={cn(triggerClass, "w-full")}>
+                    <SelectValue placeholder="进度" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部进度</SelectItem>
+                    {PROJECT_STAGE_OPTIONS.map((stage) => (
+                      <SelectItem key={stage} value={stage}>
+                        {stage}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className={cn(triggerClass, "w-full")}>
+                    <SelectValue placeholder="类别" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部类别</SelectItem>
+                    {PROJECT_TYPE_OPTIONS.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={serviceTypeFilter} onValueChange={setServiceTypeFilter}>
+                  <SelectTrigger className={cn(triggerWideClass, "w-full")}>
+                    <SelectValue placeholder="服务类型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部服务</SelectItem>
+                    {SERVICE_TYPE_OPTIONS.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                  <SelectTrigger className={cn(triggerWideClass, "w-full")}>
+                    <SelectValue placeholder="优先级" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部优先级</SelectItem>
+                    {PROJECT_PRIORITY_OPTIONS.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <Select value={bdFilter} onValueChange={setBdFilter}>
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="AI策略" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部AI策略</SelectItem>
-                  {BD_OPTIONS.map((bd) => (
-                    <SelectItem key={bd} value={bd}>
-                      {bd}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={monthFilter} onValueChange={setMonthFilter}>
-                <SelectTrigger className="w-[110px]">
-                  <SelectValue placeholder="月份" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部月份</SelectItem>
-                  {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((month) => (
-                    <SelectItem key={month} value={month}>{month}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={hoursSort} onValueChange={setHoursSort}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="累计商务时间" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">不排序</SelectItem>
-                  <SelectItem value="asc">累计商务时间升序</SelectItem>
-                  <SelectItem value="desc">累计商务时间降序</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="hidden md:flex items-center gap-2 ml-auto" />
+                <Select value={bdFilter} onValueChange={setBdFilter}>
+                  <SelectTrigger className={cn(triggerWideClass, "w-full")}>
+                    <SelectValue placeholder="BD" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部BD</SelectItem>
+                    {BD_OPTIONS.map((bd) => (
+                      <SelectItem key={bd} value={bd}>
+                        {bd}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={monthFilter} onValueChange={setMonthFilter}>
+                  <SelectTrigger className={cn(triggerClass, "w-full")}>
+                    <SelectValue placeholder="月份" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部月份</SelectItem>
+                    {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((month) => (
+                      <SelectItem key={month} value={month}>
+                        {month}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -303,42 +304,42 @@ const ProjectsTab: React.FC = () => {
             className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50"
             onClick={() => handleProjectClick(project)}
           >
-            <CardContent className="pt-4">
+            <CardContent className={cardBaseClass}>
               <div className="flex items-start justify-between mb-2 gap-2">
                 <div className="min-w-0">
-                  <div className="font-medium text-sm line-clamp-2">
+                  <div className={cn("line-clamp-2", cardTitleClass)}>
                     {project.projectName || '-'}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1 font-mono">
+                  <div className={cn("mt-1 font-mono", cardMetaClass)}>
                     {project.projectId}
                   </div>
                 </div>
                 <Badge
                   variant={getPriorityBadgeVariant(project.priority)}
-                  className="text-xs shrink-0"
+                  className={cn("text-xs shrink-0", badgeTextClass)}
                 >
                   {project.priority || '-'}
                 </Badge>
               </div>
 
-              <div className="flex flex-wrap gap-2 mt-3">
-                <Badge variant="outline" className="text-xs">
+              <div className="flex flex-wrap gap-2 mt-2 sm:mt-3">
+                <Badge variant="outline" className={cn("text-xs", badgeTextClass)}>
                   {project.serviceType || '-'}
                 </Badge>
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className={cn("text-xs", badgeTextClass)}>
                   {project.projectType || '-'}
                 </Badge>
                 <Badge
                   variant="outline"
-                  className={cn('text-xs', getStageBadgeClass(project.stage))}
+                  className={cn('text-xs', badgeTextClass, getStageBadgeClass(project.stage))}
                 >
                   {project.stage || '-'}
                 </Badge>
               </div>
 
-              <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
+              <div className={cn("mt-2 flex items-center justify-between", cardMetaClass)}>
                 <span>
-                  AI策略: <UserProfileName name={project.bd || '-'} openId={project.bdOpenId} />
+                  BD: <UserProfileName name={project.bd || '-'} openId={project.bdOpenId} />
                   <span className="ml-2">AM: {project.am || '-'}</span>
                 </span>
                 <span className="flex items-center gap-1">
@@ -430,7 +431,7 @@ const ProjectsTab: React.FC = () => {
                         <span>{selectedProject.platform || selectedProject.deliverableName || '-'}</span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">AI策略：</span>
+                        <span className="text-muted-foreground">BD：</span>
                         <span>{selectedProject.bd || '-'}</span>
                       </div>
                       <div>
@@ -449,7 +450,7 @@ const ProjectsTab: React.FC = () => {
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="text-muted-foreground">预估项目金额：</span>
-                        <span>{selectedProject.expectedAmount ?? '-'}</span>
+                        <span>{formatCurrency(selectedProject.expectedAmount)}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">累计商务时间(hr)：</span>
