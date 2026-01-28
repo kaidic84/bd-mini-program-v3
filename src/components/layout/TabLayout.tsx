@@ -55,7 +55,15 @@ const tabs: TabItem[] = [
   { key: "usage", label: "使用记录", icon: FileCheck },
 ];
 
-const FULL_ACCESS_USERS = new Set(["袁晓南", "邹思敏", "黄毅", "侯昭薇", "陈凯蒂"]);
+const FULL_ACCESS_USERS = new Set([
+  "袁晓南",
+  "邹思敏",
+  "黄毅",
+  "侯昭薇",
+  "陈凯蒂",
+  "蔡重阳",
+  "徐汉歌",
+]);
 
 interface OverviewCounts {
   newClients: number;
