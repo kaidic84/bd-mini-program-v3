@@ -62,7 +62,6 @@ const FULL_ACCESS_USERS = new Set([
   "侯昭薇",
   "陈凯蒂",
   "蔡重阳",
-  "徐汉歌",
 ]);
 
 interface OverviewCounts {
