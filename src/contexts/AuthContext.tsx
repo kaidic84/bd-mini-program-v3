@@ -35,6 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: String(data.id || `feishu-${data.openId || 'user'}`),
         username: String(data.username || data.openId || ''),
         name: String(data.name || data.username || data.openId || ''),
+        openId: String(data.openId || ''),
       };
       if (!newUser.username || !newUser.name) return false;
       setUser(newUser);

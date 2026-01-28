@@ -6,6 +6,9 @@ import "./env.js";
 import crypto from "crypto";
 import express from "express";
 import cors from "cors";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import { createRecord, listFields, listRecords, updateRecord, sendMessageToUser } from "./feishu.js";
 import {
@@ -70,6 +73,14 @@ const DAILY_FORM_BD_OPEN_IDS = String(process.env.DAILY_FORM_BD_OPEN_IDS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+const DAILY_FORM_WEEKLY_OPEN_IDS = String(process.env.DAILY_FORM_WEEKLY_OPEN_IDS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const DAILY_FORM_WEEKLY_DAY = (() => {
+  const raw = Number(process.env.DAILY_FORM_WEEKLY_DAY);
+  return Number.isFinite(raw) && raw >= 0 && raw <= 6 ? raw : 1; // default Monday
+})();
 const CRON_SECRET = String(process.env.CRON_SECRET || "").trim();
 const AUTH_LINK_SECRET = String(process.env.FEISHU_AUTH_LINK_SECRET || "").trim();
 const AUTH_LINK_TTL_MINUTES = Number(process.env.FEISHU_AUTH_LINK_TTL_MINUTES || 10);
@@ -98,6 +109,51 @@ function getCurrentOpenId(req) {
 }
 
 const authWhitelist = buildAuthWhitelist(AUTH_WHITELIST_RAW);
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const USAGE_STORE_PATH = path.join(__dirname, "data", "daily_form_usage.json");
+
+const formatLocalDate = (date) => {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const normalizeUsageDate = (value) => {
+  if (!value) return formatLocalDate(new Date());
+  if (value instanceof Date) return formatLocalDate(value);
+  const raw = String(value || "").trim();
+  if (!raw) return formatLocalDate(new Date());
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(raw)) {
+    const [y, m, d] = raw.replace(/\//g, "-").split("-");
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return formatLocalDate(parsed);
+  return formatLocalDate(new Date());
+};
+
+async function readUsageStore() {
+  try {
+    const raw = await fs.readFile(USAGE_STORE_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && parsed.entries && typeof parsed.entries === "object") {
+      return { version: 1, entries: parsed.entries };
+    }
+  } catch {
+    // ignore read/parse errors
+  }
+  return { version: 1, entries: {} };
+}
+
+async function writeUsageStore(store) {
+  await fs.mkdir(path.dirname(USAGE_STORE_PATH), { recursive: true });
+  const tmp = `${USAGE_STORE_PATH}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(store, null, 2), "utf8");
+  await fs.rename(tmp, USAGE_STORE_PATH);
+}
 
 function base64UrlEncode(value) {
   return Buffer.from(String(value || ""), "utf8")
@@ -561,6 +617,112 @@ app.get("/api/auth/verify", (req, res) => {
   });
 });
 
+// ====== Daily form usage ======
+app.post("/api/usage/mark", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const openId = String(body.openId || body.open_id || "").trim();
+    const username = String(body.username || body.user || "").trim();
+    const name = String(body.name || body.displayName || "").trim();
+    const date = normalizeUsageDate(body.date);
+
+    let user = resolveAuthUser({ openId, username, name });
+    if (!user && openId) {
+      user = {
+        openId,
+        username: username || openId,
+        name: name || username || openId,
+      };
+    }
+    if (!user || !user.openId) {
+      return res.status(400).json({ success: false, error: "missing user identity" });
+    }
+
+    const store = await readUsageStore();
+    const key = `${date}|${user.openId}`;
+    const existing = store.entries[key] || {
+      date,
+      openId: user.openId,
+      name: user.name || "",
+      username: user.username || "",
+      count: 0,
+      lastAt: "",
+    };
+    existing.count = Number(existing.count || 0) + 1;
+    existing.lastAt = new Date().toISOString();
+    if (user.name) existing.name = user.name;
+    if (user.username) existing.username = user.username;
+    store.entries[key] = existing;
+    await writeUsageStore(store);
+
+    return res.json({ success: true, data: existing });
+  } catch (e) {
+    console.error("POST /api/usage/mark failed:", e);
+    return res.status(500).json({ success: false, error: String(e) });
+  }
+});
+
+app.get("/api/usage/list", async (req, res) => {
+  try {
+    const daysRaw = Number(req.query.days);
+    const maxDays = 31;
+    const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(daysRaw, maxDays) : 7;
+
+    const toRaw = String(req.query.to || "").trim();
+    const fromRaw = String(req.query.from || "").trim();
+
+    let end = toRaw ? new Date(toRaw) : new Date();
+    if (Number.isNaN(end.getTime())) end = new Date();
+    end = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+    let start = fromRaw ? new Date(fromRaw) : new Date(end);
+    if (Number.isNaN(start.getTime())) start = new Date(end);
+    start = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+
+    if (!fromRaw) {
+      start.setDate(end.getDate() - (days - 1));
+    }
+    if (start > end) {
+      const tmp = start;
+      start = end;
+      end = tmp;
+    }
+
+    const dates = [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      dates.push(formatLocalDate(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const store = await readUsageStore();
+    const users = Array.from(authWhitelist.byOpenId.values())
+      .filter((u) => u?.openId)
+      .map((u) => ({
+        openId: u.openId,
+        name: u.name || u.username || u.openId,
+        username: u.username || "",
+      }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), "zh-CN"));
+
+    const usage = {};
+    dates.forEach((d) => {
+      usage[d] = {};
+    });
+    for (const entry of Object.values(store.entries || {})) {
+      const date = entry?.date;
+      const openId = entry?.openId;
+      if (!date || !openId || !usage[date]) continue;
+      usage[date][openId] = entry;
+    }
+
+    return res.json({ success: true, data: { dates, users, usage } });
+  } catch (e) {
+    console.error("GET /api/usage/list failed:", e);
+    return res.status(500).json({ success: false, error: String(e) });
+  }
+});
+
 // ====== 定时提醒：每日表单 ======
 app.get("/api/notify/daily", async (req, res) => {
   try {
@@ -605,15 +767,24 @@ app.get("/api/notify/daily", async (req, res) => {
           .split(",")
           .map((value) => value.trim())
           .filter(Boolean);
-    const openIds = openIdsFromQuery.length
-      ? openIdsFromQuery
-      : DAILY_FORM_BD_OPEN_IDS.length
-        ? DAILY_FORM_BD_OPEN_IDS
-        : [
-            "ou_a58586d5eae4171246d9514720e46db7",
-            "ou_b89e947decf816f6f337f873358a52ec",
-            "ou_f5dac90ed9608641db9db9fa39e2a0ec",
-          ];
+    const unique = (list) => Array.from(new Set(list.filter(Boolean)));
+    const dailyIds = DAILY_FORM_BD_OPEN_IDS.length
+      ? DAILY_FORM_BD_OPEN_IDS
+      : [
+          "ou_a58586d5eae4171246d9514720e46db7",
+          "ou_b89e947decf816f6f337f873358a52ec",
+          "ou_f5dac90ed9608641db9db9fa39e2a0ec",
+        ];
+    const weeklyCandidates = DAILY_FORM_WEEKLY_OPEN_IDS.length
+      ? DAILY_FORM_WEEKLY_OPEN_IDS
+      : Array.from(authWhitelist.byOpenId.keys());
+    const dailySet = new Set(dailyIds);
+    const weeklyIds = unique(weeklyCandidates).filter((id) => !dailySet.has(id));
+    const weeklySet = new Set(weeklyIds);
+    const isWeeklyDay = new Date().getDay() === DAILY_FORM_WEEKLY_DAY;
+    const scheduledOpenIds = isWeeklyDay ? unique([...dailyIds, ...weeklyIds]) : dailyIds;
+    const openIds = openIdsFromQuery.length ? openIdsFromQuery : scheduledOpenIds;
+    const ttlDays = Math.max(1, Math.ceil(ttlMinutes / (60 * 24)));
 
     let text = `${title}：${url}`;
     if (title.includes("提醒预览")) {
@@ -639,9 +810,22 @@ app.get("/api/notify/daily", async (req, res) => {
         } else {
           loginError = "auth link not configured";
         }
-        const message = loginUrl
-          ? `${text}\n登录链接（${ttlMinutes}分钟内有效）：${loginUrl}`
-          : text;
+        const isDailyUser = dailySet.has(openId);
+        const isWeeklyUser = !isDailyUser && weeklySet.has(openId);
+        const link = loginUrl || url;
+        const specialMessage =
+          isWeeklyUser
+            ? `通过以下链接访问客户及项目数据（链接${ttlDays}日内有效）：${link}`
+            : isDailyUser && title.includes("提醒预览")
+            ? `请进入售前小程序中的"提醒预览"，查收需要跟进的项目提醒（链接${ttlDays}日内有效）：${link}`
+            : isDailyUser && title.includes("每日表单")
+              ? `请进入售前小程序中的"每日表单"进行填写（链接${ttlDays}日内有效）：${link}`
+              : null;
+        const message = specialMessage
+          ? specialMessage
+          : loginUrl
+            ? `${text}\n登录链接（${ttlMinutes}分钟内有效）：${loginUrl}`
+            : text;
         const data = await sendMessageToUser(openId, message);
         results.push({ openId, success: true, data, loginUrl: loginUrl || null, loginError });
       } catch (e) {

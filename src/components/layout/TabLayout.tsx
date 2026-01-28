@@ -17,6 +17,7 @@ import {
   Database,
   LayoutGrid,
   LogOut,
+  FileCheck,
   ArrowLeft,
 } from "lucide-react";
 
@@ -28,6 +29,7 @@ import DailyFormTab from "@/pages/tabs/DailyFormTab";
 import RemindersTab from "@/pages/tabs/RemindersTab";
 import KanbanTab from "@/pages/tabs/KanbanTab";
 import BusinessDataTab from "@/pages/tabs/BusinessDataTab";
+import UsageTab from "@/pages/tabs/UsageTab";
 
 type TabKey =
   | "business"
@@ -36,7 +38,8 @@ type TabKey =
   | "projects"
   | "deals"
   | "daily"
-  | "reminders";
+  | "reminders"
+  | "usage";
 
 interface TabItem {
   key: TabKey;
@@ -49,6 +52,7 @@ const tabs: TabItem[] = [
   { key: "business", label: "业务数据", icon: Database },
   { key: "daily", label: "每日表单", icon: ClipboardList },
   { key: "reminders", label: "提醒预览", icon: Bell },
+  { key: "usage", label: "使用记录", icon: FileCheck },
 ];
 
 const FULL_ACCESS_USERS = new Set(["袁晓南", "邹思敏", "黄毅", "侯昭薇", "陈凯蒂"]);
@@ -275,6 +279,7 @@ const TabLayout: React.FC = () => {
                 <Route path="deals" element={guardRoute("deals", <DealsTab />)} />
                 <Route path="daily" element={guardRoute("daily", <DailyFormTab />)} />
                 <Route path="reminders" element={guardRoute("reminders", <RemindersTab />)} />
+                <Route path="usage" element={guardRoute("usage", <UsageTab />)} />
 
                 <Route path="*" element={<Navigate to="/app" replace />} />
               </Routes>

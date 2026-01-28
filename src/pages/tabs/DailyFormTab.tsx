@@ -105,6 +105,12 @@ const formatDateSlash = (date: Date) => {
   const dd = String(date.getDate()).padStart(2, "0");
   return `${yyyy}/${mm}/${dd}`;
 };
+const formatDateDash = (date: Date) => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
 
 const makeEmptyNewClient = (): NewClientDraft => ({
   localId: makeLocalId(),
@@ -480,6 +486,24 @@ export default function DailyFormTab() {
     setHoursInput("");
   };
 
+  const markDailyUsage = async () => {
+    if (!user) return;
+    try {
+      await fetch("/api/usage/mark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({
+          openId: user.openId || "",
+          username: user.username,
+          name: user.name,
+          date: formatDateDash(new Date()),
+        }),
+      });
+    } catch (e) {
+      console.warn("[DailyFormTab] mark usage failed:", e);
+    }
+  };
+
   const handleSubmit = async () => {
     if (timeEntries.length === 0) return toast.error("请至少添加一个项目的时间记录");
     try {
@@ -500,6 +524,7 @@ export default function DailyFormTab() {
         hasNewOrUpdateProject: hasNewProject === "yes" || hasUpdateProject === "yes",
         projectEntries: timeEntries.map((e) => ({ projectId: e.projectId, projectName: e.projectName, bdHours: e.hours })),
       } as any);
+      await markDailyUsage();
       toast.success("每日表单提交成功");
 
       setCurrentStep(1);

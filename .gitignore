@@ -26,3 +26,4 @@ dist-ssr
 .env
 .env.*
 server/.env
+server/data/daily_form_usage.json
