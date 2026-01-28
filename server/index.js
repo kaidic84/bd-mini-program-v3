@@ -155,6 +155,29 @@ async function writeUsageStore(store) {
   await fs.rename(tmp, USAGE_STORE_PATH);
 }
 
+async function markUsageEntry({ openId, name, username, date }) {
+  const normalizedOpenId = String(openId || "").trim();
+  if (!normalizedOpenId) return null;
+  const usageDate = normalizeUsageDate(date);
+  const store = await readUsageStore();
+  const key = `${usageDate}|${normalizedOpenId}`;
+  const existing = store.entries[key] || {
+    date: usageDate,
+    openId: normalizedOpenId,
+    name: String(name || "").trim(),
+    username: String(username || "").trim(),
+    count: 0,
+    lastAt: "",
+  };
+  existing.count = Number(existing.count || 0) + 1;
+  existing.lastAt = new Date().toISOString();
+  if (name) existing.name = String(name || "").trim();
+  if (username) existing.username = String(username || "").trim();
+  store.entries[key] = existing;
+  await writeUsageStore(store);
+  return existing;
+}
+
 function base64UrlEncode(value) {
   return Buffer.from(String(value || ""), "utf8")
     .toString("base64")
@@ -606,6 +629,14 @@ app.get("/api/auth/verify", (req, res) => {
   }
   const user = verified.user;
   const id = user.openId ? `feishu-${user.openId}` : `user-${user.username || "unknown"}`;
+  if (user.openId) {
+    markUsageEntry({
+      openId: user.openId,
+      name: user.name || user.username,
+      username: user.username,
+      date: new Date(),
+    }).catch((e) => console.error("markUsageEntry failed:", e));
+  }
   return res.json({
     success: true,
     data: {
@@ -638,24 +669,13 @@ app.post("/api/usage/mark", async (req, res) => {
       return res.status(400).json({ success: false, error: "missing user identity" });
     }
 
-    const store = await readUsageStore();
-    const key = `${date}|${user.openId}`;
-    const existing = store.entries[key] || {
-      date,
+    const entry = await markUsageEntry({
       openId: user.openId,
       name: user.name || "",
       username: user.username || "",
-      count: 0,
-      lastAt: "",
-    };
-    existing.count = Number(existing.count || 0) + 1;
-    existing.lastAt = new Date().toISOString();
-    if (user.name) existing.name = user.name;
-    if (user.username) existing.username = user.username;
-    store.entries[key] = existing;
-    await writeUsageStore(store);
-
-    return res.json({ success: true, data: existing });
+      date,
+    });
+    return res.json({ success: true, data: entry });
   } catch (e) {
     console.error("POST /api/usage/mark failed:", e);
     return res.status(500).json({ success: false, error: String(e) });
