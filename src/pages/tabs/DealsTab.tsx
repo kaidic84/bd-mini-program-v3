@@ -82,6 +82,21 @@ const DealsTab: React.FC = () => {
     return '';
   };
 
+  const getDateValue = (raw?: string) => {
+    if (!raw) return 0;
+    const str = String(raw).trim();
+    if (!str) return 0;
+    const num = Number(str);
+    if (Number.isFinite(num)) {
+      if (str.length >= 13 || num > 1e11) return num;
+      if (str.length === 10) return num * 1000;
+    }
+    const normalized = str.replace(/\//g, "-");
+    const parsed = new Date(normalized);
+    const t = parsed.getTime();
+    return Number.isNaN(t) ? 0 : t;
+  };
+
   const filterDeals = () => {
     let result = [...deals];
 
@@ -114,6 +129,7 @@ const DealsTab: React.FC = () => {
       });
     }
 
+    result.sort((a, b) => getDateValue(b.createdAt) - getDateValue(a.createdAt));
     setFilteredDeals(result);
   };
 

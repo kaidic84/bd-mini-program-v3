@@ -1770,7 +1770,7 @@ const PROJECT_FIELD = {
 
   daysSinceUpdate: "距上次更新天数",
 
-  createdAt: "创建时间",
+  createdAt: "立项创建时间",
 
 };
 
@@ -2869,11 +2869,11 @@ function mapDealRecord(it = {}) {
     grossMargin: pickNumber(f[DEAL_FIELD.grossMargin] || f.grossMargin),
     lastUpdateDate: f[DEAL_FIELD.lastUpdateDate] || f.lastUpdateDate || "",
     createdAt:
+      f["立项创建时间"] ||
+      f["立项创建日期"] ||
       f[DEAL_FIELD.createdAt] ||
       f["创建时间"] ||
       f["创建日期"] ||
-      f["立项创建时间"] ||
-      f["立项创建日期"] ||
       f.createdAt ||
       it.created_time ||
       "",

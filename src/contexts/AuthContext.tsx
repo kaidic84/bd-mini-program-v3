@@ -14,6 +14,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
+    const debugName = String((import.meta as any)?.env?.VITE_DEBUG_USER || '').trim();
+    if (debugName) {
+      const debugUser: User = {
+        id: `debug-${debugName}`,
+        username: debugName,
+        name: debugName,
+        openId: '',
+      };
+      setUser(debugUser);
+      localStorage.setItem('bd_user', JSON.stringify(debugUser));
+      return;
+    }
     // 检查本地存储中的登录状态
     const storedUser = localStorage.getItem('bd_user');
     if (storedUser) {
@@ -22,6 +34,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const loginWithToken = async (token: string): Promise<boolean> => {
+    const debugName = String((import.meta as any)?.env?.VITE_DEBUG_USER || '').trim();
+    if (debugName) {
+      const debugUser: User = {
+        id: `debug-${debugName}`,
+        username: debugName,
+        name: debugName,
+        openId: '',
+      };
+      setUser(debugUser);
+      localStorage.setItem('bd_user', JSON.stringify(debugUser));
+      return true;
+    }
     const raw = String(token || '').trim();
     if (!raw) return false;
     try {

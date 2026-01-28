@@ -6,12 +6,18 @@ import { toast } from 'sonner';
 
 const Login: React.FC = () => {
   const [status, setStatus] = useState<'idle' | 'verifying' | 'error'>('idle');
-  const { loginWithToken } = useAuth();
+  const { loginWithToken, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const redirect = searchParams.get('redirect');
+
+  useEffect(() => {
+    if (token || !isAuthenticated) return;
+    const from = (location.state as any)?.from?.pathname;
+    navigate(redirect || from || '/app', { replace: true });
+  }, [token, isAuthenticated, navigate, redirect, location.state]);
 
   useEffect(() => {
     if (!token) {

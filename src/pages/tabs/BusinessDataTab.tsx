@@ -1,12 +1,16 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Database, Users, FolderKanban, FileCheck } from "lucide-react";
+import { Database, Users, FolderKanban, FileCheck, Lock } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { getAccess } from "@/lib/access";
 
 const BusinessDataTab: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const access = getAccess(String(user?.name || ""));
 
   const items = [
     {
@@ -14,18 +18,21 @@ const BusinessDataTab: React.FC = () => {
       label: "客户",
       description: "查看客户信息",
       icon: Users,
+      locked: !access.canBusinessClients,
     },
     {
       key: "projects",
       label: "项目",
       description: "查看项目进度与详情",
       icon: FolderKanban,
+      locked: !access.canBusinessProjects,
     },
     {
       key: "deals",
       label: "立项",
       description: "查看立项数据",
       icon: FileCheck,
+      locked: !access.canBusinessDeals,
     },
   ] as const;
 
@@ -48,7 +55,7 @@ const BusinessDataTab: React.FC = () => {
             return (
               <Card
                 key={item.key}
-                className="group min-h-[150px] border-border/70 bg-card/80 transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-[0_22px_60px_-46px_rgba(255,140,72,0.45)]"
+                className="group relative min-h-[150px] border-border/70 bg-card/80 transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-[0_22px_60px_-46px_rgba(255,140,72,0.45)]"
               >
                 <CardContent className="flex h-full items-center justify-between gap-4 px-6 py-6 lg:px-7 lg:py-7">
                   <div className="flex items-start gap-4">
@@ -65,10 +72,19 @@ const BusinessDataTab: React.FC = () => {
                     variant="outline"
                     size="default"
                     onClick={() => navigate(`/app/${item.key}`)}
+                    disabled={item.locked}
                   >
                     进入
                   </Button>
                 </CardContent>
+                {item.locked && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-background/60 text-muted-foreground">
+                    <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card/80 px-3 py-1 text-xs">
+                      <Lock className="h-3.5 w-3.5" />
+                      权限受限
+                    </div>
+                  </div>
+                )}
               </Card>
             );
           })}

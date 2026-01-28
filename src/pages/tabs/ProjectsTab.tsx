@@ -21,6 +21,23 @@ import { cn } from '@/lib/utils';
 import { initUserProfileFromWindow, renderUserProfile } from '@/lib/feishuUserProfile';
 // 飞书时间戳兜底展示
 import { formatDateSafe } from '@/lib/date';
+import { useAuth } from '@/contexts/AuthContext';
+import { getAccess } from '@/lib/access';
+
+const getDateValue = (raw?: string) => {
+  if (!raw) return 0;
+  const str = String(raw).trim();
+  if (!str) return 0;
+  const num = Number(str);
+  if (Number.isFinite(num)) {
+    if (str.length >= 13 || num > 1e11) return num;
+    if (str.length === 10) return num * 1000;
+  }
+  const normalized = str.replace(/\//g, "-");
+  const parsed = new Date(normalized);
+  const t = parsed.getTime();
+  return Number.isNaN(t) ? 0 : t;
+};
 
 type UserProfileNameProps = {
   name: string;
@@ -78,6 +95,8 @@ const UserProfileName: React.FC<UserProfileNameProps> = ({ name, openId, classNa
 };
 
 const ProjectsTab: React.FC = () => {
+  const { user } = useAuth();
+  const access = getAccess(String(user?.name || ""));
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -150,6 +169,7 @@ const ProjectsTab: React.FC = () => {
       result = result.filter((p) => Number(extractMonth(p.month)) === Number(monthFilter));
     }
 
+    result.sort((a, b) => getDateValue(b.createdAt) - getDateValue(a.createdAt));
     setFilteredProjects(result);
   };
 
@@ -450,7 +470,7 @@ const ProjectsTab: React.FC = () => {
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="text-muted-foreground">预估项目金额：</span>
-                        <span>{formatCurrency(selectedProject.expectedAmount)}</span>
+                        <span>{access.canProjectAmount ? formatCurrency(selectedProject.expectedAmount) : "已锁定"}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">累计商务时间(hr)：</span>

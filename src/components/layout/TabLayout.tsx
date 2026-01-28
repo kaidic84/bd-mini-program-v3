@@ -18,6 +18,7 @@ import {
   LayoutGrid,
   LogOut,
   FileCheck,
+  Lock,
   ArrowLeft,
 } from "lucide-react";
 
@@ -30,6 +31,7 @@ import RemindersTab from "@/pages/tabs/RemindersTab";
 import KanbanTab from "@/pages/tabs/KanbanTab";
 import BusinessDataTab from "@/pages/tabs/BusinessDataTab";
 import UsageTab from "@/pages/tabs/UsageTab";
+import { getAccess } from "@/lib/access";
 
 type TabKey =
   | "business"
@@ -52,17 +54,7 @@ const tabs: TabItem[] = [
   { key: "business", label: "业务数据", icon: Database },
   { key: "daily", label: "每日表单", icon: ClipboardList },
   { key: "reminders", label: "提醒预览", icon: Bell },
-  { key: "usage", label: "使用记录", icon: FileCheck },
 ];
-
-const FULL_ACCESS_USERS = new Set([
-  "袁晓南",
-  "邹思敏",
-  "黄毅",
-  "侯昭薇",
-  "陈凯蒂",
-  "蔡重阳",
-]);
 
 interface OverviewCounts {
   newClients: number;
@@ -75,12 +67,26 @@ interface HomeOverviewProps {
   userName: string;
   todayLabel: string;
   overviewCounts: OverviewCounts;
+  usageLocked: boolean;
 }
+
+const LockedPanel: React.FC = () => (
+  <div className="mx-auto flex min-h-[50vh] max-w-3xl items-center justify-center">
+    <div className="rounded-2xl border border-border/60 bg-card/70 px-6 py-8 text-center shadow-sm">
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted/30">
+        <Lock className="h-5 w-5 text-muted-foreground" />
+      </div>
+      <div className="text-base font-semibold text-foreground">当前内容已锁定</div>
+      <div className="mt-2 text-sm text-muted-foreground">你暂无权限查看该模块，如需开通请联系管理员</div>
+    </div>
+  </div>
+);
 
 const HomeOverview: React.FC<HomeOverviewProps> = ({
   userName,
   todayLabel,
   overviewCounts,
+  usageLocked,
 }) => (
   <section className="relative overflow-hidden rounded-[28px] border border-border/60 bg-black/45 p-6 text-foreground shadow-[0_35px_70px_-50px_rgba(0,0,0,0.9)] backdrop-blur">
     <div className="pointer-events-none absolute -right-16 -top-12 h-56 w-56 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(255,188,120,0.75),transparent_70%)] opacity-70" />
@@ -96,7 +102,7 @@ const HomeOverview: React.FC<HomeOverviewProps> = ({
         <p className="text-sm text-muted-foreground">项目更新、立项进度、提醒同步，一屏掌控</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <span className="miniapp-chip">每日 10:00 提醒</span>
+        <span className="miniapp-chip">即时更新</span>
         <span className="miniapp-chip">飞书同步</span>
         <span className="miniapp-chip">桌面优先</span>
       </div>
@@ -133,6 +139,18 @@ const HomeOverview: React.FC<HomeOverviewProps> = ({
       <div className="miniapp-scorecard">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>快捷入口</span>
+          <NavLink
+            to="usage"
+            className={cn(
+              "inline-flex items-center gap-1 text-xs underline-offset-4",
+              usageLocked
+                ? "text-muted-foreground/70"
+                : "text-primary hover:text-primary/80 hover:underline"
+            )}
+          >
+            访问日志
+            {usageLocked && <Lock className="h-3 w-3" />}
+          </NavLink>
         </div>
         <div className="mt-3 grid gap-3">
           <NavLink to="daily" className="miniapp-quick">
@@ -173,13 +191,21 @@ const TabLayout: React.FC = () => {
   const isHome = normalizedPath === "/app";
   const isBusinessChild = ["/app/clients", "/app/projects", "/app/deals"].includes(normalizedPath);
   const userName = String(user?.name || "").trim();
-  const hasFullAccess = FULL_ACCESS_USERS.has(userName);
-  const defaultPath = hasFullAccess ? "/app" : "/app/kanban";
-  const allowedTabs = hasFullAccess
-    ? tabs
-    : tabs.filter((tab) => tab.key === "kanban" || tab.key === "business");
+  const access = getAccess(userName);
+  const canAccessRoute = (key: TabKey) => {
+    if (access.full) return true;
+    if (key === "daily") return access.canDaily;
+    if (key === "reminders") return access.canReminders;
+    if (key === "usage") return access.canUsage;
+    if (key === "business" || key === "kanban") return true;
+    if (key === "clients") return access.canBusinessClients;
+    if (key === "projects") return access.canBusinessProjects;
+    if (key === "deals") return access.canBusinessDeals;
+    return false;
+  };
   const guardRoute = (key: TabKey, element: React.ReactElement) =>
-    hasFullAccess || key === "kanban" || key === "business" ? element : <Navigate to={defaultPath} replace />;
+    canAccessRoute(key) ? element : <LockedPanel />;
+  const allowedTabs = tabs;
 
   React.useEffect(() => {
     let isActive = true;
@@ -267,15 +293,12 @@ const TabLayout: React.FC = () => {
                 <Route
                   index
                   element={
-                    hasFullAccess ? (
-                      <HomeOverview
-                        userName={user?.name || "伙伴"}
-                        todayLabel={todayLabel}
-                        overviewCounts={overviewCounts}
-                      />
-                    ) : (
-                      <Navigate to={defaultPath} replace />
-                    )
+                    <HomeOverview
+                      userName={user?.name || "伙伴"}
+                      todayLabel={todayLabel}
+                      overviewCounts={overviewCounts}
+                      usageLocked={!canAccessRoute("usage")}
+                    />
                   }
                 />
 
@@ -303,19 +326,28 @@ const TabLayout: React.FC = () => {
       >
         {allowedTabs.map((tab) => {
           const Icon = tab.icon;
+          const locked = !canAccessRoute(tab.key);
           return (
             <NavLink
               key={tab.key}
-              to={tab.key}
+              to={locked ? "#" : tab.key}
+              onClick={(event) => {
+                if (locked) event.preventDefault();
+              }}
               className={({ isActive }) =>
                 cn(
                   "miniapp-tab",
-                  isActive ? "miniapp-tab-active" : "hover:text-foreground hover:bg-foreground/10"
+                  locked
+                    ? "cursor-not-allowed text-muted-foreground hover:bg-transparent"
+                    : isActive
+                      ? "miniapp-tab-active"
+                      : "hover:text-foreground hover:bg-foreground/10"
                 )
               }
             >
               <Icon className="h-5 w-5" />
               <span className="whitespace-nowrap">{tab.label}</span>
+              {locked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
             </NavLink>
           );
         })}

@@ -106,5 +106,11 @@ export function feishuToClient(raw: any): Client {
     owner,
     isAnnual,
     relatedProjectIds,
+    createdAt:
+      fields?.createdAt ||
+      fields?.["客户信息创建时间"] ||
+      fields?.["创建时间"] ||
+      fields?.["创建日期"] ||
+      "",
   };
 }

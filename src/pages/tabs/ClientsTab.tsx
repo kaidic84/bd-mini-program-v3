@@ -65,6 +65,21 @@ function pickTextArr(v: any): string[] {
   return Array.isArray(v[0]?.text_arr) ? v[0].text_arr : [];
 }
 
+function getDateValue(raw?: string): number {
+  if (!raw) return 0;
+  const str = String(raw).trim();
+  if (!str) return 0;
+  const num = Number(str);
+  if (Number.isFinite(num)) {
+    if (str.length >= 13 || num > 1e11) return num;
+    if (str.length === 10) return num * 1000;
+  }
+  const normalized = str.replace(/\//g, "-");
+  const parsed = new Date(normalized);
+  const t = parsed.getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
 export function feishuToClient(c: any): Client {
   const fields = c?.fields || c || {};
 
@@ -108,6 +123,13 @@ export function feishuToClient(c: any): Client {
     (Array.isArray(c?.relatedProjectIds) ? c.relatedProjectIds : null) ||
     pickTextArr(fields?.["项目日志表"]) ||
     pickTextArr(fields?.["项目进度数据表1-客户ID"]);
+  const createdAt =
+    c?.createdAt ||
+    fields?.createdAt ||
+    fields?.["客户信息创建时间"] ||
+    fields?.["创建时间"] ||
+    fields?.["创建日期"] ||
+    "";
 
   return {
     id: String(id || ""),
@@ -124,6 +146,7 @@ export function feishuToClient(c: any): Client {
     owner,
     ownerOpenId: pickPeopleFirstOpenId(fields?.ownerOpenId ?? c?.ownerOpenId) || "",
     relatedProjectIds,
+    createdAt: String(createdAt || ""),
     // 兼容字段
     customerId: String(id || ""),
   };
@@ -294,6 +317,7 @@ const ClientsTab: React.FC = () => {
       result = result.filter((c) => c.owner === bdFilter);
     }
 
+    result.sort((a, b) => getDateValue(b.createdAt) - getDateValue(a.createdAt));
     setFilteredClients(result);
   };
 
