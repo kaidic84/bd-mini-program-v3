@@ -169,7 +169,9 @@ async function markUsageEntry({ openId, name, username, date }) {
     count: 0,
     lastAt: "",
   };
-  existing.count = Number(existing.count || 0) + 1;
+  if (!existing.count || Number(existing.count) < 1) {
+    existing.count = 1;
+  }
   existing.lastAt = new Date().toISOString();
   if (name) existing.name = String(name || "").trim();
   if (username) existing.username = String(username || "").trim();
@@ -1770,7 +1772,7 @@ const PROJECT_FIELD = {
 
   daysSinceUpdate: "距上次更新天数",
 
-  createdAt: "立项创建时间",
+  createdAt: "创建时间",
 
 };
 
@@ -1976,6 +1978,7 @@ function mapProjectRecord(it = {}) {
 
     createdAt:
       f[PROJECT_FIELD.createdAt] ||
+      f["记录创建时间"] ||
       f["创建日期"] ||
       f.createdAt ||
       it.created_time ||
