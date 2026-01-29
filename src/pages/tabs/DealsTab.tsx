@@ -82,6 +82,13 @@ const DealsTab: React.FC = () => {
     return '';
   };
 
+  const getYearMonthValue = (raw?: string) => {
+    const normalized = normalizeYearMonth(raw);
+    if (!normalized) return 0;
+    const num = Number(normalized.replace('.', ''));
+    return Number.isFinite(num) ? num : 0;
+  };
+
   const getDateValue = (raw?: string) => {
     if (!raw) return 0;
     const str = String(raw).trim();
@@ -129,7 +136,11 @@ const DealsTab: React.FC = () => {
       });
     }
 
-    result.sort((a, b) => getDateValue(b.createdAt) - getDateValue(a.createdAt));
+    result.sort((a, b) => {
+      const monthDiff = getYearMonthValue(b.month) - getYearMonthValue(a.month);
+      if (monthDiff !== 0) return monthDiff;
+      return getDateValue(b.createdAt) - getDateValue(a.createdAt);
+    });
     setFilteredDeals(result);
   };
 

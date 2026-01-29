@@ -80,6 +80,25 @@ function getDateValue(raw?: string): number {
   return Number.isNaN(t) ? 0 : t;
 }
 
+function getYearMonthValue(raw?: string): number {
+  if (!raw) return 0;
+  const str = String(raw).trim();
+  if (!str) return 0;
+  const match = str.match(/(\d{4})\D*?(\d{1,2})/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (Number.isFinite(year) && Number.isFinite(month)) return year * 100 + month;
+  }
+  const digits = str.replace(/[^\d]/g, "");
+  if (digits.length >= 5) {
+    const year = Number(digits.slice(0, 4));
+    const month = Number(digits.slice(4, 6) || digits.slice(4, 5));
+    if (Number.isFinite(year) && Number.isFinite(month)) return year * 100 + month;
+  }
+  return 0;
+}
+
 export function feishuToClient(c: any): Client {
   const fields = c?.fields || c || {};
 
@@ -317,7 +336,11 @@ const ClientsTab: React.FC = () => {
       result = result.filter((c) => c.owner === bdFilter);
     }
 
-    result.sort((a, b) => getDateValue(b.createdAt) - getDateValue(a.createdAt));
+    result.sort((a, b) => {
+      const monthDiff = getYearMonthValue(b.leadMonth) - getYearMonthValue(a.leadMonth);
+      if (monthDiff !== 0) return monthDiff;
+      return getDateValue(b.createdAt) - getDateValue(a.createdAt);
+    });
     setFilteredClients(result);
   };
 
