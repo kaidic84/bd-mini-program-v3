@@ -307,7 +307,7 @@ const ProjectNew: React.FC = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label>AI策略 *</Label>
+              <Label>BD *</Label>
               <Select value={bd} onValueChange={setBd}>
                 <SelectTrigger>
                   <SelectValue placeholder="请选择" />
