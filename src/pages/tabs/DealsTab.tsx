@@ -21,6 +21,10 @@ const DealsTab: React.FC = () => {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [dealFilterOptions, setDealFilterOptions] = useState({
+    months: [] as string[],
+    signCompanies: [] as string[],
+  });
   const controlClass = "h-[clamp(34px,3.2vw,44px)] text-[clamp(12px,1.1vw,14px)]";
   const triggerClass = `${controlClass} w-auto min-w-[120px] px-3 whitespace-nowrap shrink-0`;
   const triggerWideClass = `${controlClass} w-auto min-w-[150px] px-3 whitespace-nowrap shrink-0`;
@@ -45,6 +49,42 @@ const DealsTab: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    let timer: number | null = null;
+    const syncOptions = async () => {
+      const data = await dataService.getDealFieldOptions([
+        '所属年月',
+        '所属月份',
+        '签约公司主体',
+      ]);
+      const months =
+        data['所属年月']?.length
+          ? data['所属年月']
+          : data['所属月份']?.length
+            ? data['所属月份']
+            : Array.from(
+                new Set(
+                  deals
+                    .map((d) => normalizeYearMonth(d.month))
+                    .filter((v) => v)
+                )
+              ).sort((a, b) => a.localeCompare(b));
+      const signCompanies =
+        data['签约公司主体']?.length
+          ? data['签约公司主体']
+          : Array.from(new Set(deals.map((d) => String(d.signCompany || '').trim()).filter((v) => v)));
+      const next = { months, signCompanies };
+      setDealFilterOptions(next);
+      if (monthFilter !== 'all' && !next.months.includes(monthFilter)) setMonthFilter('all');
+      if (signCompanyFilter !== 'all' && !next.signCompanies.includes(signCompanyFilter)) setSignCompanyFilter('all');
+    };
+    syncOptions();
+    timer = window.setInterval(syncOptions, 30000);
+    return () => {
+      if (timer) window.clearInterval(timer);
+    };
+  }, [deals, monthFilter, signCompanyFilter]);
 
   useEffect(() => {
     filterDeals();
@@ -110,7 +150,10 @@ const DealsTab: React.FC = () => {
     if (searchKeyword) {
       const keyword = searchKeyword.toLowerCase();
       result = result.filter((d) =>
-        getProjectName(d).toLowerCase().includes(keyword)
+        getProjectName(d).toLowerCase().includes(keyword) ||
+        String(d.serialNo || '').toLowerCase().includes(keyword) ||
+        String(d.primaryNo || '').toLowerCase().includes(keyword) ||
+        String(d.dealId || '').toLowerCase().includes(keyword)
       );
     }
 
@@ -200,16 +243,8 @@ const DealsTab: React.FC = () => {
   const totalIncome = filteredDeals.reduce((sum, d) => sum + (Number(d.incomeWithTax) || 0), 0);
   const totalReceived = filteredDeals.reduce((sum, d) => sum + (Number(d.receivedAmount) || 0), 0);
   const totalRemaining = filteredDeals.reduce((sum, d) => sum + (Number(d.remainingReceivable) || 0), 0);
-  const monthOptions = Array.from(
-    new Set(
-      deals
-        .map((d) => normalizeYearMonth(d.month))
-        .filter((v) => v)
-    )
-  ).sort((a, b) => a.localeCompare(b));
-  const signCompanyOptions = Array.from(
-    new Set(deals.map((d) => String(d.signCompany || '').trim()).filter((v) => v))
-  );
+  const monthOptions = dealFilterOptions.months;
+  const signCompanyOptions = dealFilterOptions.signCompanies;
 
   return (
     <div className="space-y-4">
@@ -221,7 +256,7 @@ const DealsTab: React.FC = () => {
               <div className="relative w-full lg:flex-[1.15] lg:max-w-[560px]">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="搜索项目名称..."
+                  placeholder="搜索项目名称或立项编号..."
                   value={searchKeyword}
                   onChange={(e) => setSearchKeyword(e.target.value)}
                   className={`${controlClass} pl-9`}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { dataService } from '@/services/dataService';
 import type {
   UnfinishedReminderItem,
@@ -105,6 +105,30 @@ const toInputDate = (value?: string) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const updateDraftToggle = <T extends Record<string, boolean>>(
+  setState: React.Dispatch<React.SetStateAction<T>>,
+  key: string,
+  checked: boolean
+) => {
+  setState((prev) => {
+    const next = { ...prev };
+    if (checked) {
+      next[key] = true as T[string & keyof T];
+    } else {
+      delete next[key];
+    }
+    return next;
+  });
+};
+
+const updateDraftValue = <T extends Record<string, string>>(
+  setState: React.Dispatch<React.SetStateAction<T>>,
+  key: string,
+  value: string
+) => {
+  setState((prev) => ({ ...prev, [key]: value }));
+};
+
 const RemindersTab: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'unfinished' | 'receivable' | 'deal'>('unfinished');
@@ -128,6 +152,14 @@ const RemindersTab: React.FC = () => {
   const [receiptDialogItem, setReceiptDialogItem] = useState<ReceivableReminderItem | null>(null);
   const [receiptDialogAmount, setReceiptDialogAmount] = useState<number | null>(null);
   const [receiptDialogDate, setReceiptDialogDate] = useState('');
+  const [unfinishedFollowDrafts, setUnfinishedFollowDrafts] = useState<Record<string, boolean>>({});
+  const [unfinishedStageDrafts, setUnfinishedStageDrafts] = useState<Record<string, 'FA' | '丢单'>>({});
+  const [finishedFollowDrafts, setFinishedFollowDrafts] = useState<Record<string, boolean>>({});
+  const [finishedFinishDrafts, setFinishedFinishDrafts] = useState<Record<string, boolean>>({});
+  const [receivableFollowDrafts, setReceivableFollowDrafts] = useState<Record<string, boolean>>({});
+  const [savingUnfinished, setSavingUnfinished] = useState(false);
+  const [savingFinished, setSavingFinished] = useState(false);
+  const [savingReceivable, setSavingReceivable] = useState(false);
   const userBdName = String(user?.name || '').trim();
   const filterByUser = <T extends { bd?: string },>(items: T[]) =>
     userBdName ? items.filter((item) => matchBdName(item.bd, userBdName)) : items;
@@ -531,6 +563,221 @@ const RemindersTab: React.FC = () => {
     }
   };
 
+  const unfinishedDraftCount = useMemo(() => {
+    const keys = new Set([
+      ...Object.keys(unfinishedFollowDrafts),
+      ...Object.keys(unfinishedStageDrafts),
+    ]);
+    return keys.size;
+  }, [unfinishedFollowDrafts, unfinishedStageDrafts]);
+
+  const finishedDraftCount = useMemo(() => {
+    let count = new Set([
+      ...Object.keys(finishedFollowDrafts),
+      ...Object.keys(finishedFinishDrafts),
+    ]).size;
+    finishedReminders.forEach((item) => {
+      const draft = dealEndDateDrafts[item.dealId];
+      if (draft && draft !== toInputDate(item.projectEndDate)) count += 1;
+    });
+    return count;
+  }, [finishedFollowDrafts, finishedFinishDrafts, dealEndDateDrafts, finishedReminders]);
+
+  const receivableDraftCount = useMemo(() => {
+    let count = 0;
+    receivableReminders.forEach((item) => {
+      if (!item.dealId) return;
+      const dealId = item.dealId;
+      const hasFollow = Boolean(receivableFollowDrafts[dealId]);
+      const draftNext = (nextPaymentDateDrafts[dealId] || '').trim();
+      const originalNext = toInputDate(item.firstPaymentDate);
+      const hasNextChange = Boolean(draftNext && draftNext !== originalNext);
+      const amountRaw = String(receivedAmountDrafts[dealId] ?? '').trim();
+      const hasAmount = amountRaw !== '';
+      if (hasFollow || hasNextChange || hasAmount) count += 1;
+    });
+    return count;
+  }, [receivableFollowDrafts, nextPaymentDateDrafts, receivedAmountDrafts, receivableReminders]);
+
+  const handleSaveUnfinished = async () => {
+    if (savingUnfinished) return;
+    if (unfinishedDraftCount === 0) {
+      toast.error('暂无可保存的改动');
+      return;
+    }
+    setSavingUnfinished(true);
+    try {
+      const tasks: Promise<boolean>[] = [];
+      unfinishedReminders.forEach((item) => {
+        const stageDraft = unfinishedStageDrafts[item.projectId];
+        if (stageDraft) {
+          tasks.push(
+            dataService.updateProject(item.projectId, {
+              stage: stageDraft,
+              lastUpdateDate: formatTodaySlash(),
+            })
+          );
+        }
+      });
+      Object.keys(unfinishedFollowDrafts).forEach((projectId) => {
+        if (unfinishedFollowDrafts[projectId]) {
+          tasks.push(dataService.confirmFollowUp(projectId));
+        }
+      });
+      const results = await Promise.all(tasks);
+      const ok = results.every(Boolean);
+      if (ok) {
+        toast.success('进行中项目改动已保存');
+        setUnfinishedFollowDrafts({});
+        setUnfinishedStageDrafts({});
+        await loadReminders();
+      } else {
+        toast.error('部分改动保存失败，请重试');
+      }
+    } catch (error) {
+      console.error('保存进行中项目改动失败:', error);
+      toast.error('保存失败');
+    } finally {
+      setSavingUnfinished(false);
+    }
+  };
+
+  const handleSaveFinished = async () => {
+    if (savingFinished) return;
+    if (finishedDraftCount === 0) {
+      toast.error('暂无可保存的改动');
+      return;
+    }
+    setSavingFinished(true);
+    try {
+      const dealUpdates = new Map<string, { endDate?: string; isFinished?: string }>();
+      finishedReminders.forEach((item) => {
+        if (!item.dealId) return;
+        const draftEnd = dealEndDateDrafts[item.dealId];
+        const originalEnd = toInputDate(item.projectEndDate);
+        const finishDraft = finishedFinishDrafts[item.dealId];
+        if ((draftEnd && draftEnd !== originalEnd) || finishDraft) {
+          const patch: { endDate?: string; isFinished?: string } = {};
+          if (draftEnd && draftEnd !== originalEnd) patch.endDate = draftEnd;
+          if (finishDraft) patch.isFinished = '是';
+          dealUpdates.set(item.dealId, patch);
+        }
+      });
+
+      const tasks: Promise<boolean>[] = [];
+      dealUpdates.forEach((patch, dealId) => {
+        tasks.push(dataService.updateDeal(dealId, patch));
+      });
+      Object.keys(finishedFollowDrafts).forEach((projectId) => {
+        if (finishedFollowDrafts[projectId]) {
+          tasks.push(dataService.confirmFollowUp(projectId));
+        }
+      });
+
+      const results = await Promise.all(tasks);
+      const ok = results.every(Boolean);
+      if (ok) {
+        toast.success('立项项目改动已保存');
+        setDealEndDateDrafts({});
+        setFinishedFollowDrafts({});
+        setFinishedFinishDrafts({});
+        await loadReminders();
+      } else {
+        toast.error('部分改动保存失败，请重试');
+      }
+    } catch (error) {
+      console.error('保存立项项目改动失败:', error);
+      toast.error('保存失败');
+    } finally {
+      setSavingFinished(false);
+    }
+  };
+
+  const handleSaveReceivable = async () => {
+    if (savingReceivable) return;
+    if (receivableDraftCount === 0) {
+      toast.error('暂无可保存的改动');
+      return;
+    }
+    setSavingReceivable(true);
+    try {
+      const missingNextPayment: string[] = [];
+      const invalidAmounts: string[] = [];
+      for (const item of receivableReminders) {
+        if (!item.dealId) continue;
+        const dealId = item.dealId;
+        const amountRaw = String(receivedAmountDrafts[dealId] ?? '').trim();
+        const hasAmountInput = amountRaw !== '';
+        const delta = normalizeCurrencyInput(amountRaw);
+        if (hasAmountInput && (delta === null || delta <= 0)) {
+          invalidAmounts.push(item.projectName || dealId);
+        }
+        if (hasAmountInput) {
+          const draftNext = (nextPaymentDateDrafts[dealId] || '').trim();
+          if (!draftNext) {
+            missingNextPayment.push(item.projectName || dealId);
+          }
+        }
+      }
+      if (invalidAmounts.length > 0) {
+        toast.error(`请填写有效的本次收款金额（${invalidAmounts.length}条）`);
+        setSavingReceivable(false);
+        return;
+      }
+      if (missingNextPayment.length > 0) {
+        toast.error(`请先填写预计下次到款时间（${missingNextPayment.length}条）`);
+        setSavingReceivable(false);
+        return;
+      }
+
+      const tasks: Promise<boolean>[] = [];
+      for (const item of receivableReminders) {
+        if (!item.dealId) continue;
+        const dealId = item.dealId;
+        const draftNext = String(nextPaymentDateDrafts[dealId] ?? '').trim();
+        const originalNext = toInputDate(item.firstPaymentDate);
+        const deltaRaw = String(receivedAmountDrafts[dealId] ?? '').trim();
+        const hasAmountInput = deltaRaw !== '';
+        const delta = normalizeCurrencyInput(deltaRaw);
+
+        if (hasAmountInput && delta !== null && delta > 0) {
+          const nextDate = draftNext || originalNext;
+          if (!nextDate) {
+            toast.error('请先填写预计下次到款时间');
+            setSavingReceivable(false);
+            return;
+          }
+          const currentReceived = normalizeCurrencyInput(item.receivedAmount) ?? 0;
+          const nextTotal = roundCurrency(currentReceived + delta);
+          tasks.push(dataService.updateDeal(dealId, { receivedAmount: nextTotal, firstPaymentDate: nextDate }));
+        } else if (draftNext && draftNext !== originalNext) {
+          tasks.push(dataService.updateDeal(dealId, { firstPaymentDate: draftNext }));
+        }
+
+        if (receivableFollowDrafts[dealId]) {
+          tasks.push(dataService.confirmReceivableFollowUp(dealId));
+        }
+      }
+
+      const results = await Promise.all(tasks);
+      const ok = results.every(Boolean);
+      if (ok) {
+        toast.success('待收款项目改动已保存');
+        setNextPaymentDateDrafts({});
+        setReceivedAmountDrafts({});
+        setReceivableFollowDrafts({});
+        await loadReminders();
+      } else {
+        toast.error('部分改动保存失败，请重试');
+      }
+    } catch (error) {
+      console.error('保存待收款项目改动失败:', error);
+      toast.error('保存失败');
+    } finally {
+      setSavingReceivable(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -618,6 +865,19 @@ const RemindersTab: React.FC = () => {
             </Card>
           ) : (
             <>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs text-muted-foreground">
+                  {unfinishedDraftCount > 0 ? `已修改 ${unfinishedDraftCount} 项` : '暂无改动'}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveUnfinished}
+                  disabled={savingUnfinished || unfinishedDraftCount === 0}
+                >
+                  {savingUnfinished ? '保存中...' : '保存改动'}
+                </Button>
+              </div>
               {/* PC端表格 */}
               <div className="hidden md:block">
                 <Card>
@@ -635,9 +895,14 @@ const RemindersTab: React.FC = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {unfinishedReminders.map(item => (
+                        {unfinishedReminders.map(item => {
+                          const stageDraft = unfinishedStageDrafts[item.projectId];
+                          const stageValue = stageDraft || item.stage;
+                          const followChecked =
+                            unfinishedFollowDrafts[item.projectId] ?? Boolean(item.isFollowedUp);
+                          return (
                           <TableRow key={item.projectId}>
-                            <TableCell className="max-w-[200px] truncate font-medium" title={item.projectName}>
+                            <TableCell className="max-w-[200px] whitespace-normal break-words font-medium">
                               {item.projectName}
                             </TableCell>
                             <TableCell>{item.shortName}</TableCell>
@@ -652,9 +917,9 @@ const RemindersTab: React.FC = () => {
                             <TableCell>
                               <Badge
                                 variant="outline"
-                                className={cn('text-xs whitespace-nowrap', getStageBadgeClass(item.stage))}
+                                className={cn('text-xs whitespace-nowrap', getStageBadgeClass(stageValue))}
                               >
-                                {item.stage}
+                                {stageValue}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">
@@ -668,12 +933,14 @@ const RemindersTab: React.FC = () => {
                               <div className="flex flex-col gap-2">
                                 <div className="flex items-center gap-2">
                                   <Checkbox
-                                    checked={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
-                                    onCheckedChange={() => handleConfirmFollowUp(item.projectId)}
+                                    checked={followChecked}
+                                    onCheckedChange={(checked) => {
+                                      if (Boolean(item.isFollowedUp)) return;
+                                      updateDraftToggle(setUnfinishedFollowDrafts, item.projectId, checked === true);
+                                    }}
                                     disabled={
                                       Boolean(item.isFollowedUp) ||
-                                      confirmingIds.has(item.projectId) ||
-                                      updatingStageIds.has(item.projectId)
+                                      savingUnfinished
                                     }
                                   />
                                   <span className="text-xs text-muted-foreground">已跟进</span>
@@ -682,21 +949,41 @@ const RemindersTab: React.FC = () => {
                                   <div className="flex items-center gap-2">
                                     <Button
                                       type="button"
-                                      variant="outline"
+                                      variant={stageDraft === 'FA' ? 'default' : 'outline'}
                                       size="sm"
                                       className="h-7 px-2 text-xs"
-                                      onClick={() => handleUpdateStage(item.projectId, 'FA')}
-                                      disabled={updatingStageIds.has(item.projectId)}
+                                      onClick={() => {
+                                        setUnfinishedStageDrafts((prev) => {
+                                          const next = { ...prev };
+                                          if (next[item.projectId] === 'FA') {
+                                            delete next[item.projectId];
+                                          } else {
+                                            next[item.projectId] = 'FA';
+                                          }
+                                          return next;
+                                        });
+                                      }}
+                                      disabled={savingUnfinished}
                                     >
                                       FA
                                     </Button>
                                     <Button
                                       type="button"
-                                      variant="outline"
+                                      variant={stageDraft === '丢单' ? 'default' : 'outline'}
                                       size="sm"
                                       className="h-7 px-2 text-xs"
-                                      onClick={() => handleUpdateStage(item.projectId, '丢单')}
-                                      disabled={updatingStageIds.has(item.projectId)}
+                                      onClick={() => {
+                                        setUnfinishedStageDrafts((prev) => {
+                                          const next = { ...prev };
+                                          if (next[item.projectId] === '丢单') {
+                                            delete next[item.projectId];
+                                          } else {
+                                            next[item.projectId] = '丢单';
+                                          }
+                                          return next;
+                                        });
+                                      }}
+                                      disabled={savingUnfinished}
                                     >
                                       丢单
                                     </Button>
@@ -705,7 +992,7 @@ const RemindersTab: React.FC = () => {
                               </div>
                             </TableCell>
                           </TableRow>
-                        ))}
+                        );})}
                       </TableBody>
                     </Table>
                   </CardContent>
@@ -714,12 +1001,17 @@ const RemindersTab: React.FC = () => {
 
               {/* 移动端卡片 */}
               <div className="md:hidden space-y-3">
-                {unfinishedReminders.map(item => (
+                {unfinishedReminders.map(item => {
+                  const stageDraft = unfinishedStageDrafts[item.projectId];
+                  const stageValue = stageDraft || item.stage;
+                  const followChecked =
+                    unfinishedFollowDrafts[item.projectId] ?? Boolean(item.isFollowedUp);
+                  return (
                   <Card key={item.projectId}>
                     <CardContent className="pt-4">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm line-clamp-2">{item.projectName}</div>
+                          <div className="font-medium text-sm whitespace-normal break-words">{item.projectName}</div>
                           <div className="text-xs text-muted-foreground mt-1">
                             {item.shortName}
                           </div>
@@ -736,9 +1028,9 @@ const RemindersTab: React.FC = () => {
                         </Badge>
                         <Badge
                           variant="outline"
-                          className={cn('text-xs whitespace-nowrap', getStageBadgeClass(item.stage))}
+                          className={cn('text-xs whitespace-nowrap', getStageBadgeClass(stageValue))}
                         >
-                          {item.stage}
+                          {stageValue}
                         </Badge>
                       </div>
 
@@ -751,36 +1043,53 @@ const RemindersTab: React.FC = () => {
                       </div>
 
                       <div className="flex flex-wrap items-center justify-end gap-2 mt-3 pt-3 border-t">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleConfirmFollowUp(item.projectId)}
-                          disabled={
-                            Boolean(item.isFollowedUp) ||
-                            confirmingIds.has(item.projectId) ||
-                            updatingStageIds.has(item.projectId)
-                          }
-                          className="h-8 text-xs"
-                        >
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          确认已跟进
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={followChecked}
+                            onCheckedChange={(checked) => {
+                              if (Boolean(item.isFollowedUp)) return;
+                              updateDraftToggle(setUnfinishedFollowDrafts, item.projectId, checked === true);
+                            }}
+                            disabled={Boolean(item.isFollowedUp) || savingUnfinished}
+                          />
+                          <span className="text-xs text-muted-foreground">已跟进</span>
+                        </div>
                         {item.stage === '停滞' && (
                           <>
                             <Button
-                              variant="outline"
+                              variant={stageDraft === 'FA' ? 'default' : 'outline'}
                               size="sm"
-                              onClick={() => handleUpdateStage(item.projectId, 'FA')}
-                              disabled={updatingStageIds.has(item.projectId)}
+                              onClick={() => {
+                                setUnfinishedStageDrafts((prev) => {
+                                  const next = { ...prev };
+                                  if (next[item.projectId] === 'FA') {
+                                    delete next[item.projectId];
+                                  } else {
+                                    next[item.projectId] = 'FA';
+                                  }
+                                  return next;
+                                });
+                              }}
+                              disabled={savingUnfinished}
                               className="h-8 text-xs"
                             >
                               FA
                             </Button>
                             <Button
-                              variant="outline"
+                              variant={stageDraft === '丢单' ? 'default' : 'outline'}
                               size="sm"
-                              onClick={() => handleUpdateStage(item.projectId, '丢单')}
-                              disabled={updatingStageIds.has(item.projectId)}
+                              onClick={() => {
+                                setUnfinishedStageDrafts((prev) => {
+                                  const next = { ...prev };
+                                  if (next[item.projectId] === '丢单') {
+                                    delete next[item.projectId];
+                                  } else {
+                                    next[item.projectId] = '丢单';
+                                  }
+                                  return next;
+                                });
+                              }}
+                              disabled={savingUnfinished}
                               className="h-8 text-xs"
                             >
                               丢单
@@ -790,7 +1099,7 @@ const RemindersTab: React.FC = () => {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                );})}
               </div>
             </>
           )}
@@ -810,6 +1119,19 @@ const RemindersTab: React.FC = () => {
             </Card>
           ) : (
             <>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs text-muted-foreground">
+                  {receivableDraftCount > 0 ? `已修改 ${receivableDraftCount} 项` : '暂无改动'}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveReceivable}
+                  disabled={savingReceivable || receivableDraftCount === 0}
+                >
+                  {savingReceivable ? '保存中...' : '保存改动'}
+                </Button>
+              </div>
               {/* PC端表格 */}
               <div className="hidden md:block">
                 <Card>
@@ -829,10 +1151,10 @@ const RemindersTab: React.FC = () => {
                         {receivableReminders.map((item) => {
                           const canUpdate = Boolean(item.dealId);
                           const receivedDraft = item.dealId ? receivedAmountDrafts[item.dealId] ?? '' : '';
-                          const canFollow = Boolean(item.dealId);
+                          const followChecked = item.dealId ? receivableFollowDrafts[item.dealId] ?? false : false;
                           return (
                           <TableRow key={item.dealId || item.projectId}>
-                            <TableCell className="max-w-[220px] truncate font-medium" title={item.projectName}>
+                            <TableCell className="max-w-[220px] whitespace-normal break-words font-medium">
                               {item.projectName}
                             </TableCell>
                             <TableCell>{item.shortName || '-'}</TableCell>
@@ -846,24 +1168,14 @@ const RemindersTab: React.FC = () => {
                                   <Input
                                     type="text"
                                     inputMode="decimal"
-                                    placeholder="本次收款金额"
+                                    placeholder=""
                                     value={receivedDraft}
                                     onChange={(e) => {
                                       if (item.dealId) handleReceivedAmountChange(item.dealId, e.target.value);
                                     }}
                                     className="h-7 w-[120px] text-right text-xs"
-                                    disabled={!canUpdate}
+                                    disabled={!canUpdate || savingReceivable}
                                   />
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs"
-                                    onClick={() => handleSaveReceivedAmount(item)}
-                                    disabled={!canUpdate || (item.dealId ? updatingReceivedIds.has(item.dealId) : true)}
-                                  >
-                                    确认
-                                  </Button>
                                 </div>
                               </div>
                             </TableCell>
@@ -874,17 +1186,8 @@ const RemindersTab: React.FC = () => {
                                   value={nextPaymentDateDrafts[item.dealId] ?? toInputDate(item.firstPaymentDate)}
                                   onChange={(e) => handleNextPaymentDateChange(item.dealId, e.target.value)}
                                   className="h-7 w-[140px] text-xs"
+                                  disabled={!canUpdate || savingReceivable}
                                 />
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={() => handleSaveNextPaymentDate(item)}
-                                  disabled={updatingNextPaymentIds.has(item.dealId)}
-                                >
-                                  保存
-                                </Button>
                               </div>
                             </TableCell>
                             <TableCell className="text-right text-xs">
@@ -893,12 +1196,12 @@ const RemindersTab: React.FC = () => {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Checkbox
-                                  checked={canFollow && updatingReceivableFollowIds.has(item.dealId)}
+                                  checked={followChecked}
                                   onCheckedChange={(checked) => {
-                                    if (checked !== true) return;
-                                    handleReceivableFollowUp(item);
+                                    if (!item.dealId) return;
+                                    updateDraftToggle(setReceivableFollowDrafts, item.dealId, checked === true);
                                   }}
-                                  disabled={!canFollow || updatingReceivableFollowIds.has(item.dealId)}
+                                  disabled={!canUpdate || savingReceivable}
                                 />
                                 <span className="text-xs text-muted-foreground">已跟进</span>
                               </div>
@@ -916,13 +1219,13 @@ const RemindersTab: React.FC = () => {
                 {receivableReminders.map((item) => {
                   const canUpdate = Boolean(item.dealId);
                   const receivedDraft = item.dealId ? receivedAmountDrafts[item.dealId] ?? '' : '';
-                  const canFollow = Boolean(item.dealId);
+                  const followChecked = item.dealId ? receivableFollowDrafts[item.dealId] ?? false : false;
                   return (
                   <Card key={item.dealId || item.projectId}>
                     <CardContent className="pt-4">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm line-clamp-2">{item.projectName}</div>
+                          <div className="font-medium text-sm whitespace-normal break-words">{item.projectName}</div>
                           <div className="text-xs text-muted-foreground mt-1">
                             {item.shortName || '-'}
                           </div>
@@ -938,24 +1241,14 @@ const RemindersTab: React.FC = () => {
                             <Input
                               type="text"
                               inputMode="decimal"
-                              placeholder="本次收款金额"
+                              placeholder=""
                               value={receivedDraft}
                               onChange={(e) => {
                                 if (item.dealId) handleReceivedAmountChange(item.dealId, e.target.value);
                               }}
                               className="h-7 w-[140px] text-xs"
-                              disabled={!canUpdate}
+                              disabled={!canUpdate || savingReceivable}
                             />
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => handleSaveReceivedAmount(item)}
-                              disabled={!canUpdate || (item.dealId ? updatingReceivedIds.has(item.dealId) : true)}
-                            >
-                              确认
-                            </Button>
                           </div>
                         </div>
                         <div className="rounded-lg border border-muted-foreground/20 bg-muted/10 p-2">
@@ -966,17 +1259,8 @@ const RemindersTab: React.FC = () => {
                               value={nextPaymentDateDrafts[item.dealId] ?? toInputDate(item.firstPaymentDate)}
                               onChange={(e) => handleNextPaymentDateChange(item.dealId, e.target.value)}
                               className="h-7 w-[140px] text-xs"
+                              disabled={!canUpdate || savingReceivable}
                             />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => handleSaveNextPaymentDate(item)}
-                              disabled={updatingNextPaymentIds.has(item.dealId)}
-                            >
-                              保存
-                            </Button>
                           </div>
                         </div>
                         <div className="flex items-center justify-between">
@@ -985,12 +1269,12 @@ const RemindersTab: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-2 pt-1">
                           <Checkbox
-                            checked={canFollow && updatingReceivableFollowIds.has(item.dealId)}
+                            checked={followChecked}
                             onCheckedChange={(checked) => {
-                              if (checked !== true) return;
-                              handleReceivableFollowUp(item);
+                              if (!item.dealId) return;
+                              updateDraftToggle(setReceivableFollowDrafts, item.dealId, checked === true);
                             }}
-                            disabled={!canFollow || updatingReceivableFollowIds.has(item.dealId)}
+                            disabled={!canUpdate || savingReceivable}
                           />
                           <span className="text-xs text-muted-foreground">已跟进</span>
                         </div>
@@ -1056,9 +1340,9 @@ const RemindersTab: React.FC = () => {
                           <TableBody>
                             {signedReminders.map((item) => (
                               <TableRow key={item.dealId || item.projectId}>
-                              <TableCell className="max-w-[220px] truncate font-medium" title={item.projectName}>
-                                  {item.projectName}
-                                </TableCell>
+                              <TableCell className="max-w-[220px] whitespace-normal break-words font-medium">
+                                {item.projectName}
+                              </TableCell>
                                 <TableCell>{item.shortName || '-'}</TableCell>
                                 <TableCell className="text-destructive text-xs">未走立项流程</TableCell>
                               </TableRow>
@@ -1076,7 +1360,7 @@ const RemindersTab: React.FC = () => {
                         <CardContent className="pt-4">
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm line-clamp-2">{item.projectName}</div>
+                              <div className="font-medium text-sm whitespace-normal break-words">{item.projectName}</div>
                               <div className="text-xs text-muted-foreground mt-1">
                                 {item.shortName || '-'}
                               </div>
@@ -1105,6 +1389,19 @@ const RemindersTab: React.FC = () => {
                 </Card>
               ) : (
                 <>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs text-muted-foreground">
+                      {finishedDraftCount > 0 ? `已修改 ${finishedDraftCount} 项` : '暂无改动'}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleSaveFinished}
+                      disabled={savingFinished || finishedDraftCount === 0}
+                    >
+                      {savingFinished ? '保存中...' : '保存改动'}
+                    </Button>
+                  </div>
                   {/* PC端表格 */}
                   <div className="hidden md:block">
                     <Card>
@@ -1120,11 +1417,15 @@ const RemindersTab: React.FC = () => {
                         </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {finishedReminders.map(item => (
+                            {finishedReminders.map(item => {
+                              const followChecked =
+                                finishedFollowDrafts[item.projectId] ?? Boolean(item.isFollowedUp);
+                              const finishChecked = finishedFinishDrafts[item.dealId] ?? false;
+                              return (
                               <TableRow key={item.dealId}>
-                                <TableCell className="max-w-[200px] truncate font-medium" title={item.projectName}>
+                                <TableCell className="max-w-[200px] whitespace-normal break-words font-medium">
                                   {item.projectName}
-                            </TableCell>
+                                </TableCell>
                             <TableCell>{item.shortName}</TableCell>
                             <TableCell className="text-xs">
                               <div className="flex flex-col gap-1">
@@ -1135,16 +1436,6 @@ const RemindersTab: React.FC = () => {
                                         onChange={(e) => handleEndDateChange(item.dealId, e.target.value)}
                                         className="h-7 w-[140px] text-xs"
                                       />
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 px-2 text-xs"
-                                        onClick={() => handleSaveEndDate(item)}
-                                        disabled={updatingDealIds.has(item.dealId)}
-                                      >
-                                        保存
-                                      </Button>
                                     </div>
                                     <div className={cn(
                                       item.daysUntilEnd < 0 ? 'text-destructive' :
@@ -1165,27 +1456,29 @@ const RemindersTab: React.FC = () => {
                                   <div className="flex flex-col gap-2">
                                     <div className="flex items-center gap-2">
                                       <Checkbox
-                                        checked={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
-                                        onCheckedChange={() => handleConfirmFollowUp(item.projectId)}
+                                        checked={followChecked}
+                                        onCheckedChange={(checked) => {
+                                          if (Boolean(item.isFollowedUp)) return;
+                                          updateDraftToggle(setFinishedFollowDrafts, item.projectId, checked === true);
+                                        }}
                                         disabled={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
                                       />
                                       <span className="text-xs text-muted-foreground">已跟进</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <Checkbox
-                                        checked={finishingDealIds.has(item.dealId)}
+                                        checked={finishChecked}
                                         onCheckedChange={(checked) => {
-                                          if (checked !== true) return;
-                                          handleMarkDealFinished(item);
+                                          updateDraftToggle(setFinishedFinishDrafts, item.dealId, checked === true);
                                         }}
-                                        disabled={updatingDealIds.has(item.dealId)}
+                                        disabled={savingFinished}
                                       />
                                       <span className="text-xs text-muted-foreground">是否完结</span>
                                     </div>
                                   </div>
                                 </TableCell>
                               </TableRow>
-                            ))}
+                            );})}
                           </TableBody>
                         </Table>
                       </CardContent>
@@ -1194,12 +1487,16 @@ const RemindersTab: React.FC = () => {
 
                   {/* 移动端卡片 */}
                   <div className="md:hidden space-y-3">
-                    {finishedReminders.map(item => (
+                    {finishedReminders.map(item => {
+                      const followChecked =
+                        finishedFollowDrafts[item.projectId] ?? Boolean(item.isFollowedUp);
+                      const finishChecked = finishedFinishDrafts[item.dealId] ?? false;
+                      return (
                       <Card key={item.dealId}>
                         <CardContent className="pt-4">
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm line-clamp-2">{item.projectName}</div>
+                              <div className="font-medium text-sm whitespace-normal break-words">{item.projectName}</div>
                               <div className="text-xs text-muted-foreground mt-1">
                                 {item.shortName}
                               </div>
@@ -1216,16 +1513,6 @@ const RemindersTab: React.FC = () => {
                               onChange={(e) => handleEndDateChange(item.dealId, e.target.value)}
                               className="h-7 w-[140px] text-xs"
                             />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => handleSaveEndDate(item)}
-                              disabled={updatingDealIds.has(item.dealId)}
-                            >
-                              保存
-                            </Button>
                           </div>
                           <div className={cn(
                             'mt-2 text-xs',
@@ -1242,29 +1529,29 @@ const RemindersTab: React.FC = () => {
                           <div className="flex flex-col gap-2 mt-3 pt-3 border-t">
                             <div className="flex items-center gap-2">
                               <Checkbox
-                                checked={finishingDealIds.has(item.dealId)}
+                                checked={finishChecked}
                                 onCheckedChange={(checked) => {
-                                  if (checked !== true) return;
-                                  handleMarkDealFinished(item);
+                                  updateDraftToggle(setFinishedFinishDrafts, item.dealId, checked === true);
                                 }}
-                                disabled={updatingDealIds.has(item.dealId)}
+                                disabled={savingFinished}
                               />
                               <span className="text-xs text-muted-foreground">是否完结</span>
                             </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleConfirmFollowUp(item.projectId)}
-                              disabled={Boolean(item.isFollowedUp) || confirmingIds.has(item.projectId)}
-                              className="h-8 text-xs"
-                            >
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              确认已跟进
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={followChecked}
+                                onCheckedChange={(checked) => {
+                                  if (Boolean(item.isFollowedUp)) return;
+                                  updateDraftToggle(setFinishedFollowDrafts, item.projectId, checked === true);
+                                }}
+                                disabled={Boolean(item.isFollowedUp) || savingFinished}
+                              />
+                              <span className="text-xs text-muted-foreground">已跟进</span>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
+                    );})}
                   </div>
                 </>
               )}

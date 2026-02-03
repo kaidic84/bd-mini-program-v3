@@ -17,7 +17,7 @@ import {
   Database,
   LayoutGrid,
   LogOut,
-  FileCheck,
+  Coins,
   Lock,
   ArrowLeft,
 } from "lucide-react";
@@ -27,6 +27,7 @@ import ClientsTab from "@/pages/tabs/ClientsTab";
 import ProjectsTab from "@/pages/tabs/ProjectsTab";
 import DealsTab from "@/pages/tabs/DealsTab";
 import DailyFormTab from "@/pages/tabs/DailyFormTab";
+import CostEntryTab from "@/pages/tabs/CostEntryTab";
 import RemindersTab from "@/pages/tabs/RemindersTab";
 import KanbanTab from "@/pages/tabs/KanbanTab";
 import BusinessDataTab from "@/pages/tabs/BusinessDataTab";
@@ -40,6 +41,7 @@ type TabKey =
   | "projects"
   | "deals"
   | "daily"
+  | "cost"
   | "reminders"
   | "usage";
 
@@ -53,6 +55,7 @@ const tabs: TabItem[] = [
   { key: "kanban", label: "看板视图", icon: LayoutGrid },
   { key: "business", label: "业务数据", icon: Database },
   { key: "daily", label: "每日表单", icon: ClipboardList },
+  { key: "cost", label: "成本录入", icon: Coins },
   { key: "reminders", label: "提醒预览", icon: Bell },
 ];
 
@@ -160,6 +163,13 @@ const HomeOverview: React.FC<HomeOverviewProps> = ({
               <div className="text-xs text-muted-foreground">新增与更新业务数据</div>
             </div>
           </NavLink>
+          <NavLink to="cost" className="miniapp-quick">
+            <Coins className="h-4 w-4 text-primary" />
+            <div>
+              <div className="text-sm font-semibold">成本录入</div>
+              <div className="text-xs text-muted-foreground">三方成本明细填写</div>
+            </div>
+          </NavLink>
           <NavLink to="reminders" className="miniapp-quick">
             <Bell className="h-4 w-4 text-primary" />
             <div>
@@ -195,6 +205,7 @@ const TabLayout: React.FC = () => {
   const canAccessRoute = (key: TabKey) => {
     if (access.full) return true;
     if (key === "daily") return access.canDaily;
+    if (key === "cost") return access.canCostEntry;
     if (key === "reminders") return access.canReminders;
     if (key === "usage") return access.canUsage;
     if (key === "business" || key === "kanban") return true;
@@ -272,7 +283,7 @@ const TabLayout: React.FC = () => {
         </div>
       </header>
 
-      <main className="relative z-10 flex-1 pb-32">
+      <main className="miniapp-main relative z-10 flex-1">
         <div className="mx-auto max-w-7xl px-6 pb-12 pt-6 sm:px-8 lg:px-10">
           <div className="miniapp-stagger space-y-6">
             {!isHome && (
@@ -308,6 +319,7 @@ const TabLayout: React.FC = () => {
                 <Route path="projects" element={guardRoute("projects", <ProjectsTab />)} />
                 <Route path="deals" element={guardRoute("deals", <DealsTab />)} />
                 <Route path="daily" element={guardRoute("daily", <DailyFormTab />)} />
+                <Route path="cost" element={guardRoute("cost", <CostEntryTab />)} />
                 <Route path="reminders" element={guardRoute("reminders", <RemindersTab />)} />
                 <Route path="usage" element={guardRoute("usage", <UsageTab />)} />
 

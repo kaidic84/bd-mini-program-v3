@@ -124,6 +124,25 @@ export async function listRecords({
   return json.data?.items || [];
 }
 
+// 读取记录（带分页信息）
+export async function listRecordsWithMeta({
+  appToken,
+  tableId,
+  pageSize = 200,
+  pageToken,
+} = {}) {
+  const at = appToken || process.env.FEISHU_BITABLE_APP_TOKEN;
+  const tid = tableId || process.env.FEISHU_BITABLE_TABLE_ID;
+  const tokenPart = pageToken ? `&page_token=${encodeURIComponent(pageToken)}` : "";
+  const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${at}/tables/${tid}/records?page_size=${pageSize}${tokenPart}`;
+  const json = await feishuFetch(url);
+  return {
+    items: json.data?.items || [],
+    hasMore: Boolean(json.data?.has_more),
+    pageToken: json.data?.page_token || "",
+  };
+}
+
 const formatDateLoose = (v) => {
   if (v === null || v === undefined) return "";
   const str = String(v).trim();

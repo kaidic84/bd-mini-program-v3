@@ -3,7 +3,7 @@
  * 模拟飞书多维表数据，用于 Demo 阶段
  */
 
-import type { Client, Project, Deal, DailyFormData } from '@/types/bd';
+import type { Client, Project, Deal, DailyFormData, CostEntry } from '@/types/bd';
 
 // ==================== 客户 Mock 数据 ====================
 export const mockClients: Client[] = [
@@ -215,12 +215,16 @@ export const mockDailyForms: DailyFormData[] = [
   },
 ];
 
+// ==================== 三方成本明细 Mock 数据 ====================
+export const mockCostEntries: CostEntry[] = [];
+
 // ==================== 数据库模拟类 ====================
 class MockDatabase {
   private clients: Client[] = [...mockClients];
   private projects: Project[] = [...mockProjects];
   private deals: Deal[] = [...mockDeals];
   private dailyForms: DailyFormData[] = [...mockDailyForms];
+  private costEntries: CostEntry[] = [...mockCostEntries];
 
   // 客户操作
   getAllClients(): Client[] {
@@ -354,6 +358,32 @@ class MockDatabase {
       updatedAt: new Date().toISOString().split('T')[0],
     };
     return true;
+  }
+
+  // 三方成本明细
+  getAllCostEntries(): CostEntry[] {
+    return [...this.costEntries];
+  }
+
+  createCostEntry(data: {
+    relatedDealRecordId: string;
+    period: number;
+    amount: number;
+    remark?: string;
+    createdDate?: string;
+  }): CostEntry {
+    const createdDate = data.createdDate || new Date().toISOString().split('T')[0];
+    const newEntry: CostEntry = {
+      recordId: `COST-${String(this.costEntries.length + 1).padStart(4, '0')}`,
+      relatedDealRecordId: data.relatedDealRecordId,
+      relatedDealRecordIds: [data.relatedDealRecordId],
+      period: data.period,
+      amount: data.amount,
+      remark: data.remark,
+      createdDate,
+    };
+    this.costEntries.push(newEntry);
+    return newEntry;
   }
 
   // 每日表单操作

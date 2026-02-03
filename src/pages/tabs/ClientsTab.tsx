@@ -315,7 +315,8 @@ const ClientsTab: React.FC = () => {
       result = result.filter(
         (c) =>
           (c.shortName || "").toLowerCase().includes(keyword) ||
-          (c.companyName || "").toLowerCase().includes(keyword)
+          (c.companyName || "").toLowerCase().includes(keyword) ||
+          String(c.customerId || c.id || "").toLowerCase().includes(keyword)
       );
     }
 

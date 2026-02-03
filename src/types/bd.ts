@@ -78,7 +78,9 @@ export interface Project {
 /* ================= Deal ================= */
 
 export interface Deal {
-  serialNo?: string;       // 飞书表「编号」（自动生成）
+  recordId?: string;
+  serialNo?: string;       // 立项编号（如有）
+  primaryNo?: string;      // 主键「编号」（显示在表格左侧）
   dealId: string;
   projectId: string;
   customerId?: string;
@@ -110,6 +112,21 @@ export interface Deal {
   lastUpdateDate?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/* ================= Cost Entry ================= */
+
+export interface CostEntry {
+  recordId?: string;
+  serialNo?: string;
+  relatedDealRecordId?: string;
+  relatedDealRecordIds?: string[];
+  projectId?: string;
+  projectName?: string;
+  period?: number | null;
+  amount?: number | null;
+  createdDate?: string;
+  remark?: string;
 }
 
 /* ================= Daily ================= */

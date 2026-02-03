@@ -10,7 +10,14 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { createRecord, listFields, listRecords, updateRecord, sendMessageToUser } from "./feishu.js";
+import {
+  createRecord,
+  listFields,
+  listRecords,
+  listRecordsWithMeta,
+  updateRecord,
+  sendMessageToUser,
+} from "./feishu.js";
 import {
 
   getCustomers,
@@ -31,6 +38,69 @@ app.use(express.json({ limit: "2mb" }));
 
 const API_CACHE_TTL_MS = Number(process.env.API_CACHE_TTL_MS || 30000);
 const apiCache = new Map();
+const IDEMPOTENCY_TTL_MS = Number(process.env.IDEMPOTENCY_TTL_MS || 15000);
+const idempotencyCache = new Map();
+
+const stableStringify = (value) => {
+  if (value === null || value === undefined) return "null";
+  if (typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  const entries = keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`);
+  return `{${entries.join(",")}}`;
+};
+
+const pruneIdempotencyCache = () => {
+  const now = Date.now();
+  for (const [key, entry] of idempotencyCache.entries()) {
+    if (!entry || entry.expiresAt <= now) idempotencyCache.delete(key);
+  }
+};
+
+const buildIdempotencyKey = (req) => {
+  const headerKey = String(req.headers["x-idempotency-key"] || "").trim();
+  if (headerKey) return `h:${headerKey}`;
+  const body = req.body || {};
+  const raw = `${req.method}:${req.path}:${stableStringify(body)}`;
+  return crypto.createHash("sha256").update(raw).digest("hex");
+};
+
+const withIdempotency = async (req, res, handler) => {
+  pruneIdempotencyCache();
+  const key = buildIdempotencyKey(req);
+  const now = Date.now();
+  const cached = idempotencyCache.get(key);
+  if (cached?.response) {
+    return res.json({ ...cached.response, duplicate: true });
+  }
+  if (cached?.pending) {
+    return res.status(202).json({ success: true, duplicate: true, pending: true });
+  }
+  idempotencyCache.set(key, { pending: true, expiresAt: now + IDEMPOTENCY_TTL_MS });
+
+  let captured = null;
+  const originalJson = res.json.bind(res);
+  res.json = (payload) => {
+    captured = payload;
+    if (payload && payload.success === true) {
+      idempotencyCache.set(key, {
+        response: payload,
+        expiresAt: Date.now() + IDEMPOTENCY_TTL_MS,
+      });
+    } else {
+      idempotencyCache.delete(key);
+    }
+    return originalJson(payload);
+  };
+
+  try {
+    await handler();
+    if (!captured) idempotencyCache.delete(key);
+  } catch (e) {
+    idempotencyCache.delete(key);
+    throw e;
+  }
+};
 function getCached(key) {
   const hit = apiCache.get(key);
   if (!hit) return null;
@@ -62,6 +132,15 @@ const PROJECT_TABLE_ID = process.env.FEISHU_BITABLE_PROJECT_TABLE_ID;
 const DEAL_APP_TOKEN = process.env.FEISHU_DEAL_APP_TOKEN || PROJECT_APP_TOKEN;
 
 const DEAL_TABLE_ID = process.env.FEISHU_BITABLE_DEAL_TABLE_ID;
+
+const COST_APP_TOKEN =
+  process.env.FEISHU_COST_APP_TOKEN ||
+  process.env.FEISHU_THIRD_PARTY_COST_APP_TOKEN ||
+  PROJECT_APP_TOKEN ||
+  process.env.FEISHU_BITABLE_APP_TOKEN;
+const COST_TABLE_ID =
+  process.env.FEISHU_BITABLE_COST_TABLE_ID ||
+  process.env.FEISHU_BITABLE_THIRD_PARTY_COST_TABLE_ID;
 
 const KANBAN_APP_TOKEN = process.env.FEISHU_KANBAN_APP_TOKEN || process.env.FEISHU_BITABLE_APP_TOKEN;
 const KANBAN_BOARD_ID = process.env.FEISHU_KANBAN_BOARD_ID;
@@ -951,17 +1030,123 @@ app.get("/api/customers", async (req, res) => {
 
 });
 
+// ====== 客户表字段选项（用于前端下拉同步）======
+app.get("/api/customer-field-options", async (req, res) => {
+  try {
+    const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
+    const tableId = process.env.FEISHU_BITABLE_TABLE_ID;
+
+    if (!appToken || !tableId) {
+      return res.status(500).json({
+        success: false,
+        error: "missing customer appToken/tableId",
+      });
+    }
+
+    const rawFields = (req.query.fields || "").toString().trim();
+    const names =
+      rawFields
+        ? rawFields.split(",").map((s) => s.trim()).filter(Boolean)
+        : ["线索月份", "客户类型", "客户等级", "行业大类"];
+
+    const infoMap = await getFieldInfoMap(appToken, tableId);
+    const data = {};
+    names.forEach((name) => {
+      const info = infoMap.get(normalizeFieldName(name));
+      const options = Array.isArray(info?.options)
+        ? info.options.map((opt) => opt?.name).filter(Boolean)
+        : [];
+      data[name] = Array.from(new Set(options));
+    });
+
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error("GET /api/customer-field-options failed:", e);
+    res.status(500).json({ success: false, error: String(e) });
+  }
+});
+
+// ====== 项目进度表字段选项（用于前端下拉同步）======
+app.get("/api/project-field-options", async (req, res) => {
+  try {
+    const appToken = PROJECT_APP_TOKEN;
+    const tableId = PROJECT_TABLE_ID;
+
+    if (!appToken || !tableId) {
+      return res.status(500).json({
+        success: false,
+        error: "missing project appToken/tableId",
+      });
+    }
+
+    const rawFields = (req.query.fields || "").toString().trim();
+    const names =
+      rawFields
+        ? rawFields.split(",").map((s) => s.trim()).filter(Boolean)
+        : ["所属年月", "所属月份", "服务类型", "平台", "项目类别", "项目进度", "优先级"];
+
+    const infoMap = await getFieldInfoMap(appToken, tableId);
+    const data = {};
+    names.forEach((name) => {
+      const info = infoMap.get(normalizeFieldName(name));
+      const options = Array.isArray(info?.options)
+        ? info.options.map((opt) => opt?.name).filter(Boolean)
+        : [];
+      data[name] = Array.from(new Set(options));
+    });
+
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error("GET /api/project-field-options failed:", e);
+    res.status(500).json({ success: false, error: String(e) });
+  }
+});
+
+// ====== 立项表字段选项（用于前端下拉同步）======
+app.get("/api/deal-field-options", async (req, res) => {
+  try {
+    const appToken = DEAL_APP_TOKEN;
+    const tableId = DEAL_TABLE_ID;
+
+    if (!appToken || !tableId) {
+      return res.status(500).json({
+        success: false,
+        error: "missing deal appToken/tableId",
+      });
+    }
+
+    const rawFields = (req.query.fields || "").toString().trim();
+    const names =
+      rawFields
+        ? rawFields.split(",").map((s) => s.trim()).filter(Boolean)
+        : ["所属年月", "所属月份", "签约公司主体"];
+
+    const infoMap = await getFieldInfoMap(appToken, tableId);
+    const data = {};
+    names.forEach((name) => {
+      const info = infoMap.get(normalizeFieldName(name));
+      const options = Array.isArray(info?.options)
+        ? info.options.map((opt) => opt?.name).filter(Boolean)
+        : [];
+      data[name] = Array.from(new Set(options));
+    });
+
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error("GET /api/deal-field-options failed:", e);
+    res.status(500).json({ success: false, error: String(e) });
+  }
+});
+
 
 
 // ====== 写回飞书客户表（最稳：?field_id 写入，避免字段名空格/隐形字符?======
 
-let cachedFieldMap = null;
+const cachedFieldMap = new Map();
+const cachedFieldMapExpireAt = new Map();
 
-let cachedFieldMapExpireAt = 0;
-
-let cachedFieldInfoMap = null;
-
-let cachedFieldInfoExpireAt = 0;
+const cachedFieldInfoMap = new Map();
+const cachedFieldInfoExpireAt = new Map();
 
 const normalizeFieldName = (value) => String(value || "").replace(/\s+/g, "");
 const normalizeOptionValue = (value) =>
@@ -976,7 +1161,9 @@ async function getFieldMap(appToken, tableId) {
 
   const now = Date.now();
 
-  if (cachedFieldMap && now < cachedFieldMapExpireAt) return cachedFieldMap;
+  const key = `${appToken}::${tableId}`;
+  const expireAt = cachedFieldMapExpireAt.get(key) || 0;
+  if (cachedFieldMap.has(key) && now < expireAt) return cachedFieldMap.get(key);
 
 
 
@@ -992,9 +1179,8 @@ async function getFieldMap(appToken, tableId) {
 
 
 
-  cachedFieldMap = map;
-
-  cachedFieldMapExpireAt = now + 60 * 1000; // 60s cache
+  cachedFieldMap.set(key, map);
+  cachedFieldMapExpireAt.set(key, now + 60 * 1000); // 60s cache
 
   return map;
 
@@ -1027,7 +1213,9 @@ function findFieldId(fieldMap, expectedName) {
 
 async function getFieldInfoMap(appToken, tableId) {
   const now = Date.now();
-  if (cachedFieldInfoMap && now < cachedFieldInfoExpireAt) return cachedFieldInfoMap;
+  const key = `${appToken}::${tableId}`;
+  const expireAt = cachedFieldInfoExpireAt.get(key) || 0;
+  if (cachedFieldInfoMap.has(key) && now < expireAt) return cachedFieldInfoMap.get(key);
 
   const items = await listFields({ appToken, tableId });
   const map = new Map(); // normalized field_name -> { name, type }
@@ -1040,8 +1228,8 @@ async function getFieldInfoMap(appToken, tableId) {
     });
   });
 
-  cachedFieldInfoMap = map;
-  cachedFieldInfoExpireAt = now + 60 * 1000;
+  cachedFieldInfoMap.set(key, map);
+  cachedFieldInfoExpireAt.set(key, now + 60 * 1000);
   return map;
 }
 
@@ -1226,7 +1414,7 @@ async function resolveCustomerBdField(ownerBd) {
   return { value, known };
 }
 app.post("/api/customers", async (req, res) => {
-
+  return withIdempotency(req, res, async () => {
   try {
     console.log("🟦 POST /api/customers body:", req.body);
 
@@ -1369,7 +1557,7 @@ app.post("/api/customers", async (req, res) => {
     return res.status(500).json({ success: false, error: String(e) });
 
   }
-
+  });
 });
 
 
@@ -1377,7 +1565,7 @@ app.post("/api/customers", async (req, res) => {
 // ====== 更新飞书客户表（客户ID不可变）======
 
 app.put("/api/customers/:customerId", async (req, res) => {
-
+  return withIdempotency(req, res, async () => {
   try {
     console.log("🟧 PUT /api/customers body:", req.body, "customerId=", req.params.customerId);
 
@@ -1572,7 +1760,7 @@ app.put("/api/customers/:customerId", async (req, res) => {
     return res.status(500).json({ success: false, error: String(e) });
 
   }
-
+  });
 });
 
 
@@ -2019,38 +2207,32 @@ function mapProjectRecord(it = {}) {
 
 
 async function findProjectRecordIdByProjectId(projectId) {
-
-  const records = await listRecords({
-
-    appToken: PROJECT_APP_TOKEN,
-
-    tableId: PROJECT_TABLE_ID,
-
-    pageSize: 200,
-
-  });
-
-  const hit = (records || []).find((it) => {
-
-    const f = it.fields || {};
-
-    const val =
-
-      f[PROJECT_FIELD.projectId] ||
-
-      f.projectId ||
-
-      f.id ||
-
-      it.record_id ||
-
-      "";
-
-    return String(val).trim() === String(projectId).trim();
-
-  });
-
-  return hit?.record_id || null;
+  const target = String(projectId || "").trim();
+  if (!target) return null;
+  if (looksLikeRecordId(target)) return target;
+  let pageToken = "";
+  for (;;) {
+    const { items, hasMore, pageToken: nextToken } = await listRecordsWithMeta({
+      appToken: PROJECT_APP_TOKEN,
+      tableId: PROJECT_TABLE_ID,
+      pageSize: 200,
+      pageToken,
+    });
+    const hit = (items || []).find((it) => {
+      const f = it.fields || {};
+      const val =
+        f[PROJECT_FIELD.projectId] ||
+        f.projectId ||
+        f.id ||
+        it.record_id ||
+        "";
+      return String(val).trim() === target;
+    });
+    if (hit) return hit.record_id || null;
+    if (!hasMore || !nextToken) break;
+    pageToken = nextToken;
+  }
+  return null;
 
 }
 
@@ -2083,11 +2265,19 @@ app.get("/api/projects", async (req, res) => {
 
 
     const projectsAll = await withCache("projects:all", API_CACHE_TTL_MS, async () => {
-      const records = await listRecords({
-        appToken: PROJECT_APP_TOKEN,
-        tableId: PROJECT_TABLE_ID,
-        pageSize: 200,
-      });
+      const records = [];
+      let pageToken = "";
+      for (;;) {
+        const { items, hasMore, pageToken: nextToken } = await listRecordsWithMeta({
+          appToken: PROJECT_APP_TOKEN,
+          tableId: PROJECT_TABLE_ID,
+          pageSize: 200,
+          pageToken,
+        });
+        records.push(...(items || []));
+        if (!hasMore || !nextToken) break;
+        pageToken = nextToken;
+      }
       return (records || []).map((it) => mapProjectRecord(it));
     });
 
@@ -2200,7 +2390,7 @@ app.get("/api/projects/:projectId", async (req, res) => {
 // ====== 写入/更新项目 ======
 
 app.post("/api/projects", async (req, res) => {
-
+  return withIdempotency(req, res, async () => {
   try {
 
     if (!PROJECT_APP_TOKEN || !PROJECT_TABLE_ID) {
@@ -2461,13 +2651,13 @@ app.post("/api/projects", async (req, res) => {
     res.status(500).json({ success: false, error: String(e) });
 
   }
-
+  });
 });
 
 
 
 app.put("/api/projects/:projectId", async (req, res) => {
-
+  return withIdempotency(req, res, async () => {
   try {
 
     if (!PROJECT_APP_TOKEN || !PROJECT_TABLE_ID) {
@@ -2674,7 +2864,7 @@ app.put("/api/projects/:projectId", async (req, res) => {
     res.status(500).json({ success: false, error: String(e) });
 
   }
-
+  });
 });
 
 
@@ -2822,7 +3012,9 @@ function mapDealRecord(it = {}) {
   };
 
   const result = {
-    serialNo: f[DEAL_FIELD.serialNo] || f["编号"] || f.serialNo || "",
+    recordId: it.record_id || "",
+    serialNo: f[DEAL_FIELD.serialNo] || f.serialNo || "",
+    primaryNo: f["编号"] || "",
     dealId: f[DEAL_FIELD.dealId] || f.dealId || it.record_id || "",
     projectId: f[DEAL_FIELD.projectId] || f.projectId || "",
     customerId: f[DEAL_FIELD.customerId] || f.customerId || "",
@@ -2907,17 +3099,63 @@ function mapDealRecord(it = {}) {
 
 
 async function findDealRecordIdByDealId(dealId) {
-  const records = await listRecords({
-    appToken: DEAL_APP_TOKEN,
-    tableId: DEAL_TABLE_ID,
-    pageSize: 200,
+  const target = String(dealId || "").trim();
+  if (!target) return null;
+  if (looksLikeRecordId(target)) return target;
+  let pageToken = "";
+  for (;;) {
+    const { items, hasMore, pageToken: nextToken } = await listRecordsWithMeta({
+      appToken: DEAL_APP_TOKEN,
+      tableId: DEAL_TABLE_ID,
+      pageSize: 200,
+      pageToken,
+    });
+    const hit = (items || []).find((it) => {
+      const f = it.fields || {};
+      const val = String(
+        f[DEAL_FIELD.dealId] ||
+          f.dealId ||
+          f.id ||
+          it.record_id ||
+          ""
+      ).trim();
+      return val && val === target;
+    });
+    if (hit) return hit.record_id || null;
+    if (!hasMore || !nextToken) break;
+    pageToken = nextToken;
+  }
+  return null;
+}
+
+async function resolveDealRecordIdByAny(value) {
+  const key = String(value || "").trim();
+  if (!key) return null;
+  if (looksLikeRecordId(key)) return key;
+  let pageToken = "";
+  for (;;) {
+    const { items, hasMore, pageToken: nextToken } = await listRecordsWithMeta({
+      appToken: DEAL_APP_TOKEN,
+      tableId: DEAL_TABLE_ID,
+      pageSize: 200,
+      pageToken,
+    });
+    const hit = (items || []).find((it) => {
+      const f = it.fields || {};
+    const dealId = String(f[DEAL_FIELD.dealId] || f.dealId || f.id || "").trim();
+    const serialNo = String(f[DEAL_FIELD.serialNo] || f.serialNo || "").trim();
+    const primaryNo = String(f["编号"] || "").trim();
+    return (
+      (dealId && dealId === key) ||
+      (serialNo && serialNo === key) ||
+      (primaryNo && primaryNo === key)
+    );
   });
-  const hit = (records || []).find((it) => {
-    const f = it.fields || {};
-    const val = f[DEAL_FIELD.dealId] || f.dealId || f.id || it.record_id || "";
-    return String(val).trim() == String(dealId).trim();
-  });
-  return hit?.record_id || null;
+    if (hit) return hit.record_id || null;
+    if (!hasMore || !nextToken) break;
+    pageToken = nextToken;
+  }
+  return null;
 }
 app.get("/api/deals", async (req, res) => {
 
@@ -2993,7 +3231,7 @@ app.get("/api/deals", async (req, res) => {
 
 
 app.post("/api/deals", async (req, res) => {
-
+  return withIdempotency(req, res, async () => {
   try {
 
     if (!DEAL_APP_TOKEN || !DEAL_TABLE_ID) {
@@ -3286,13 +3524,13 @@ app.post("/api/deals", async (req, res) => {
     return res.status(500).json({ success: false, error: String(e) });
 
   }
-
+  });
 });
 
 
 
 app.put("/api/deals/:dealId", async (req, res) => {
-
+  return withIdempotency(req, res, async () => {
   try {
 
     if (!DEAL_APP_TOKEN || !DEAL_TABLE_ID) {
@@ -3598,10 +3836,703 @@ app.put("/api/deals/:dealId", async (req, res) => {
     return res.status(500).json({ success: false, error: String(e) });
 
   }
-
+  });
 });
 
 
+
+// ====== 三方成本明细 ======
+
+const COST_FIELD = {
+  serialNo: "编号",
+  relatedDeal: "关联立项",
+  projectId: "项目ID",
+  projectName: "项目名称",
+  period: "期数",
+  amount: "本期新增金额",
+  createdDate: "创建日期",
+  remark: "备注",
+};
+
+const looksLikeRecordId = (value) => /^rec[a-z0-9]+/i.test(String(value || "").trim());
+
+const parseRelationIds = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (!item) return "";
+        if (typeof item === "string") return item;
+        if (typeof item === "object" && item !== null) {
+          return item.record_id || item.recordId || item.id || item.value || item.text || "";
+        }
+        return String(item);
+      })
+      .map((v) => String(v || "").trim())
+      .filter(Boolean);
+  }
+  if (typeof value === "object" && value !== null) {
+    const recordIds =
+      value.record_ids ||
+      value.recordIds ||
+      value.link_record_ids ||
+      value.linkRecordIds ||
+      value.records ||
+      null;
+    if (Array.isArray(recordIds)) {
+      return recordIds
+        .map((item) => {
+          if (!item) return "";
+          if (typeof item === "string") return item;
+          if (typeof item === "object") {
+            return item.record_id || item.recordId || item.id || item.value || item.text || "";
+          }
+          return String(item);
+        })
+        .map((v) => String(v || "").trim())
+        .filter(Boolean);
+    }
+    const v = value.record_id || value.recordId || value.id || value.value || value.text || "";
+    return v ? [String(v).trim()] : [];
+  }
+  const raw = String(value || "").trim();
+  return raw ? [raw] : [];
+};
+
+async function sumCostAmountByRelatedDeal(relatedDealKeys) {
+  const keys = Array.isArray(relatedDealKeys) ? relatedDealKeys : [relatedDealKeys];
+  const targets = keys
+    .map((k) => String(k || "").trim().toLowerCase())
+    .filter(Boolean);
+  if (targets.length === 0) return 0;
+  const records = [];
+  let pageToken = "";
+  for (;;) {
+    const { items, hasMore, pageToken: nextToken } = await listRecordsWithMeta({
+      appToken: COST_APP_TOKEN,
+      tableId: COST_TABLE_ID,
+      pageSize: 200,
+      pageToken,
+    });
+    records.push(...(items || []));
+    if (!hasMore || !nextToken) break;
+    pageToken = nextToken;
+  }
+  let sum = 0;
+  for (const it of records || []) {
+    const mapped = mapCostRecord(it);
+    const relatedIds = (mapped.relatedDealRecordIds || []).map((id) => String(id || "").trim().toLowerCase());
+    const hit = relatedIds.some((id) => targets.includes(id));
+    if (!hit) continue;
+    const num = mapped.amount;
+    if (typeof num === "number" && Number.isFinite(num)) sum += num;
+  }
+  return Math.round((sum + Number.EPSILON) * 100) / 100;
+}
+
+async function syncDealPaidThirdPartyCost(relatedKeys) {
+  if (!DEAL_APP_TOKEN || !DEAL_TABLE_ID) {
+    return { error: "缺少立项表 appToken/tableId" };
+  }
+  const keys = Array.isArray(relatedKeys) ? relatedKeys : [relatedKeys];
+  const cleaned = keys.map((k) => String(k || "").trim()).filter(Boolean);
+  if (cleaned.length === 0) return { error: "缺少关联立项信息" };
+
+  const totalCost = await sumCostAmountByRelatedDeal(cleaned);
+  const dealRecordIdForUpdate =
+    (await resolveDealRecordIdByAny(cleaned[0])) ||
+    (await resolveDealRecordIdByAny(cleaned[1])) ||
+    (await resolveDealRecordIdByAny(cleaned[2])) ||
+    (await resolveDealRecordIdByAny(cleaned[3])) ||
+    cleaned[0];
+
+  const dealFieldInfo = await getFieldInfoMap(DEAL_APP_TOKEN, DEAL_TABLE_ID);
+  const dealFields = {};
+  const preferredNames = [
+    "已付项目成本【三方】",
+    "已付项目成本（三方）",
+    "已付项目成本(三方)",
+    "已付三方成本",
+  ];
+  const pickName =
+    preferredNames.find((name) => {
+      const info = dealFieldInfo.get(normalizeFieldName(name));
+      if (!info) return false;
+      return !isReadonlyField(dealFieldInfo, name);
+    }) || null;
+  if (!pickName) {
+    return { error: "未找到可写入的已付项目成本字段（可能是公式字段/只读）" };
+  }
+
+  dealFields[pickName] = totalCost;
+  await updateRecord({
+    appToken: DEAL_APP_TOKEN,
+    tableId: DEAL_TABLE_ID,
+    recordId: dealRecordIdForUpdate,
+    fields: dealFields,
+  });
+
+  let actualValue = null;
+  try {
+    const refreshed = await getRecordById({
+      appToken: DEAL_APP_TOKEN,
+      tableId: DEAL_TABLE_ID,
+      recordId: dealRecordIdForUpdate,
+    });
+    const raw = refreshed?.fields?.[pickName];
+    if (raw === null || raw === undefined || raw === "") {
+      actualValue = null;
+    } else if (typeof raw === "number") {
+      actualValue = raw;
+    } else if (typeof raw === "object" && raw !== null) {
+      const v = raw.value ?? raw.number ?? raw.amount ?? raw.text ?? raw.name ?? raw;
+      const n = Number(String(v).replace(/[,\s¥￥]/g, ""));
+      actualValue = Number.isNaN(n) ? v : n;
+    } else {
+      const n = Number(String(raw).replace(/[,\s¥￥]/g, ""));
+      actualValue = Number.isNaN(n) ? raw : n;
+    }
+  } catch (e) {
+    console.warn("读取立项表回写值失败:", e);
+  }
+
+  apiCache.delete("deals:all");
+  return {
+    recordId: dealRecordIdForUpdate,
+    field: pickName,
+    value: totalCost,
+    actualValue,
+  };
+}
+
+function mapCostRecord(it = {}) {
+  const f = it.fields || {};
+  const pickSingle = (v) => {
+    if (Array.isArray(v)) return pickSingle(v[0]);
+    if (typeof v === "object" && v !== null) {
+      return v?.name ?? v?.text ?? v?.label ?? v?.value ?? v?.option_name ?? "";
+    }
+    return v ?? "";
+  };
+
+  const normalizeNumber = (raw) => {
+    if (raw === null || raw === undefined || raw === "") return null;
+    if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+    const str = String(raw).replace(/[,\s¥￥]/g, "").trim();
+    if (!str) return null;
+    const num = Number(str);
+    return Number.isNaN(num) ? null : num;
+  };
+
+  const pickNumber = (v) => {
+    if (v === null || v === undefined || v === "") return null;
+    if (Array.isArray(v)) return pickNumber(v[0]);
+    if (typeof v === "object" && v !== null) {
+      const raw = v?.value ?? v?.amount ?? v?.number ?? v?.text ?? v?.name ?? v;
+      return normalizeNumber(raw);
+    }
+    return normalizeNumber(v);
+  };
+
+  const normalizeAny = (v) => {
+    if (Array.isArray(v)) {
+      const arr = v.map((item) => pickSingle(item)).filter(Boolean);
+      return arr.join(", ");
+    }
+    if (typeof v === "object" && v !== null) {
+      return pickSingle(v);
+    }
+    return v ?? "";
+  };
+
+  const relatedIds = parseRelationIds(f[COST_FIELD.relatedDeal] || f.relatedDeal || f["关联立项"]);
+  const createdRaw =
+    f[COST_FIELD.createdDate] ||
+    f.createdDate ||
+    f["创建日期"] ||
+    f["创建时间"] ||
+    it.created_time ||
+    "";
+
+  const result = {
+    recordId: it.record_id || "",
+    serialNo: f[COST_FIELD.serialNo] || f["编号"] || f.serialNo || "",
+    relatedDealRecordIds: relatedIds,
+    relatedDealRecordId: relatedIds[0] || "",
+    projectId: f[COST_FIELD.projectId] || f.projectId || "",
+    projectName: f[COST_FIELD.projectName] || f.projectName || "",
+    period: pickNumber(f[COST_FIELD.period] || f.period),
+    amount: pickNumber(f[COST_FIELD.amount] || f.amount),
+    createdDate: createdRaw,
+    remark: f[COST_FIELD.remark] || f.remark || "",
+  };
+
+  result.projectId = normalizeAny(result.projectId);
+  result.projectName = normalizeAny(result.projectName);
+  result.remark = normalizeAny(result.remark);
+  result.createdDate = formatDateLoose(normalizeAny(result.createdDate));
+
+  return result;
+}
+
+app.get("/api/costs", async (req, res) => {
+  try {
+    if (!COST_APP_TOKEN || !COST_TABLE_ID) {
+      return res.status(500).json({
+        success: false,
+        error:
+          "missing cost appToken/tableId (FEISHU_COST_APP_TOKEN/FEISHU_BITABLE_COST_TABLE_ID or FEISHU_BITABLE_THIRD_PARTY_COST_TABLE_ID)",
+      });
+    }
+
+    const projectName = String(req.query.projectName || "").trim().toLowerCase();
+    const projectId = String(req.query.projectId || "").trim();
+    const relatedDealRecordIdRaw = String(req.query.relatedDealRecordId || "").trim();
+    let relatedDealRecordId = relatedDealRecordIdRaw.toLowerCase();
+    const relatedDealId = String(req.query.relatedDealId || req.query.dealId || "").trim();
+    const relatedDealSerialNo = String(
+      req.query.relatedDealSerialNo || req.query.relatedDealNo || ""
+    ).trim();
+    if (relatedDealId) {
+      const resolved = await resolveDealRecordIdByAny(relatedDealId);
+      if (resolved) relatedDealRecordId = String(resolved || "").trim().toLowerCase();
+    }
+    if (!relatedDealRecordId && relatedDealSerialNo) {
+      const resolved = await resolveDealRecordIdByAny(relatedDealSerialNo);
+      if (resolved) relatedDealRecordId = String(resolved || "").trim().toLowerCase();
+    }
+    if (!relatedDealRecordId && relatedDealRecordIdRaw && !looksLikeRecordId(relatedDealRecordIdRaw)) {
+      const resolved = await resolveDealRecordIdByAny(relatedDealRecordIdRaw);
+      if (resolved) relatedDealRecordId = String(resolved || "").trim().toLowerCase();
+    }
+
+    const shouldBypassCache = ["1", "true", "yes"].includes(
+      String(req.query.fresh || req.query.noCache || "").trim().toLowerCase()
+    );
+
+    const fetchAllCosts = async () => {
+      const records = [];
+      let pageToken = "";
+      for (;;) {
+        const { items, hasMore, pageToken: nextToken } = await listRecordsWithMeta({
+          appToken: COST_APP_TOKEN,
+          tableId: COST_TABLE_ID,
+          pageSize: 200,
+          pageToken,
+        });
+        records.push(...(items || []));
+        if (!hasMore || !nextToken) break;
+        pageToken = nextToken;
+      }
+      return (records || []).map((it) => mapCostRecord(it));
+    };
+
+    const costsAll = shouldBypassCache
+      ? await fetchAllCosts()
+      : await withCache("costs:all", API_CACHE_TTL_MS, fetchAllCosts);
+
+    let costs = costsAll || [];
+    if (projectName) {
+      costs = costs.filter((c) => String(c.projectName || "").toLowerCase().includes(projectName));
+    }
+    if (projectId) {
+      const target = String(projectId || "").trim();
+      costs = costs.filter((c) => String(c.projectId || "").includes(target));
+    }
+    if (relatedDealRecordId || relatedDealId || relatedDealSerialNo || relatedDealRecordIdRaw) {
+      const keys = [
+        relatedDealRecordId,
+        relatedDealId,
+        relatedDealSerialNo,
+        relatedDealRecordIdRaw,
+      ]
+        .map((v) => String(v || "").trim().toLowerCase())
+        .filter(Boolean);
+      if (keys.length > 0) {
+        costs = costs.filter((c) =>
+          (c.relatedDealRecordIds || []).some((id) =>
+            keys.includes(String(id || "").trim().toLowerCase())
+          )
+        );
+      }
+    }
+
+    res.json({ success: true, data: costs });
+  } catch (e) {
+    console.error("GET /api/costs failed:", e);
+    res.status(500).json({ success: false, error: String(e) });
+  }
+});
+
+app.post("/api/costs", async (req, res) => {
+  return withIdempotency(req, res, async () => {
+  try {
+    if (!COST_APP_TOKEN || !COST_TABLE_ID) {
+      return res.status(500).json({
+        success: false,
+        error:
+          "missing cost appToken/tableId (FEISHU_COST_APP_TOKEN/FEISHU_BITABLE_COST_TABLE_ID or FEISHU_BITABLE_THIRD_PARTY_COST_TABLE_ID)",
+      });
+    }
+
+    const body = req.body || {};
+    const relatedDealRecordIdRaw = String(
+      body.relatedDealRecordId || body.relatedDealRecord || ""
+    ).trim();
+    let relatedDealRecordId = relatedDealRecordIdRaw;
+    const dealId = String(body.relatedDealId || body.dealId || "").trim();
+    const dealSerialNo = String(body.relatedDealSerialNo || body.relatedDealNo || "").trim();
+    if (dealId) {
+      relatedDealRecordId =
+        (await resolveDealRecordIdByAny(dealId)) || relatedDealRecordId;
+    }
+    if (!relatedDealRecordId && dealSerialNo) {
+      relatedDealRecordId =
+        (await resolveDealRecordIdByAny(dealSerialNo)) || relatedDealRecordId;
+    }
+    if (!relatedDealRecordId && relatedDealRecordIdRaw && !looksLikeRecordId(relatedDealRecordIdRaw)) {
+      relatedDealRecordId =
+        (await resolveDealRecordIdByAny(relatedDealRecordIdRaw)) || relatedDealRecordId;
+    }
+
+    if (!relatedDealRecordId) {
+      return res.status(400).json({ success: false, error: "missing relatedDealRecordId" });
+    }
+
+    const fieldInfoMap = await getFieldInfoMap(COST_APP_TOKEN, COST_TABLE_ID);
+
+    const normalizeNumber = (raw) => {
+      if (raw === null || raw === undefined || raw === "") return null;
+      if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+      const str = String(raw).replace(/[,\s¥￥]/g, "").trim();
+      if (!str) return null;
+      const num = Number(str);
+      return Number.isNaN(num) ? null : num;
+    };
+
+    const toUnixTs = (v) => {
+      if (v === undefined || v === null) return null;
+      if (typeof v === "number" && Number.isFinite(v)) return v < 1e11 ? v * 1000 : v;
+      const s = String(v).trim();
+      if (!s) return null;
+      if (/^\d+$/.test(s)) {
+        const num = Number(s);
+        if (!Number.isFinite(num)) return null;
+        return num < 1e11 ? num * 1000 : num;
+      }
+      const d = new Date(s.replace(/\//g, "-"));
+      if (Number.isNaN(d.getTime())) return null;
+      return d.getTime();
+    };
+
+    const setTypedField = (fieldName, rawValue) => {
+      const info = fieldInfoMap?.get(normalizeFieldName(fieldName));
+      if (info && isReadonlyField(fieldInfoMap, fieldName)) return;
+      const isEmptyString = typeof rawValue === "string" && rawValue.trim() === "";
+      if (rawValue === undefined || rawValue === null || isEmptyString) return;
+      const type = info?.type;
+      if (type === 2) {
+        const num = normalizeNumber(rawValue);
+        if (num === null) return;
+        fields[fieldName] = num;
+        return;
+      }
+      if (type === 5) {
+        const ts = toUnixTs(rawValue);
+        if (ts === null) return;
+        fields[fieldName] = ts;
+        return;
+      }
+      fields[fieldName] = String(rawValue);
+    };
+
+    const fields = {};
+    fields[COST_FIELD.relatedDeal] = [relatedDealRecordId];
+
+    setTypedField(COST_FIELD.period, body.period);
+    setTypedField(COST_FIELD.amount, body.amount ?? body.currentAmount ?? body.newAmount);
+    setTypedField(COST_FIELD.remark, String(body.remark || body.note || "").trim());
+
+    const createdDateRaw = body.createdDate || body.createdAt || "";
+    const createdDate =
+      createdDateRaw && String(createdDateRaw).trim()
+        ? String(createdDateRaw).trim()
+        : formatLocalDate(new Date());
+    setTypedField(COST_FIELD.createdDate, createdDate);
+
+    const data = await batchCreateRecords({
+      appToken: COST_APP_TOKEN,
+      tableId: COST_TABLE_ID,
+      records: [{ fields }],
+    });
+
+    const recordId = data?.records?.[0]?.record_id;
+    if (!recordId) {
+      return res.status(500).json({
+        success: false,
+        error: "feishu returned no record_id",
+        data,
+      });
+    }
+
+    let dealUpdate = null;
+    try {
+      dealUpdate = await syncDealPaidThirdPartyCost([
+        relatedDealRecordId,
+        relatedDealRecordIdRaw,
+        dealSerialNo,
+        dealId,
+      ]);
+    } catch (e) {
+      console.warn("同步已付项目成本【三方】失败:", e);
+      dealUpdate = { error: String(e) };
+    }
+
+    apiCache.delete("costs:all");
+    return res.json({ success: true, record_id: recordId, data, fields, dealUpdate });
+  } catch (e) {
+    console.error("POST /api/costs failed:", e);
+    return res.status(500).json({ success: false, error: String(e) });
+  }
+  });
+});
+
+app.post("/api/costs/batch", async (req, res) => {
+  return withIdempotency(req, res, async () => {
+    try {
+      if (!COST_APP_TOKEN || !COST_TABLE_ID) {
+        return res.status(500).json({
+          success: false,
+          error:
+            "missing cost appToken/tableId (FEISHU_COST_APP_TOKEN/FEISHU_BITABLE_COST_TABLE_ID or FEISHU_BITABLE_THIRD_PARTY_COST_TABLE_ID)",
+        });
+      }
+
+      const payload = req.body || {};
+      const items = Array.isArray(payload) ? payload : Array.isArray(payload.records) ? payload.records : [];
+      if (items.length === 0) {
+        return res.status(400).json({ success: false, error: "missing records" });
+      }
+
+      const fieldInfoMap = await getFieldInfoMap(COST_APP_TOKEN, COST_TABLE_ID);
+
+      const normalizeNumber = (raw) => {
+        if (raw === null || raw === undefined || raw === "") return null;
+        if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+        const str = String(raw).replace(/[,\s¥￥]/g, "").trim();
+        if (!str) return null;
+        const num = Number(str);
+        return Number.isNaN(num) ? null : num;
+      };
+
+      const toUnixTs = (v) => {
+        if (v === undefined || v === null) return null;
+        if (typeof v === "number" && Number.isFinite(v)) return v < 1e11 ? v * 1000 : v;
+        const s = String(v).trim();
+        if (!s) return null;
+        if (/^\d+$/.test(s)) {
+          const num = Number(s);
+          if (!Number.isFinite(num)) return null;
+          return num < 1e11 ? num * 1000 : num;
+        }
+        const d = new Date(s.replace(/\//g, "-"));
+        if (Number.isNaN(d.getTime())) return null;
+        return d.getTime();
+      };
+
+      const setTypedField = (fields, fieldName, rawValue) => {
+        const info = fieldInfoMap?.get(normalizeFieldName(fieldName));
+        if (info && isReadonlyField(fieldInfoMap, fieldName)) return;
+        const isEmptyString = typeof rawValue === "string" && rawValue.trim() === "";
+        if (rawValue === undefined || rawValue === null || isEmptyString) return;
+        const type = info?.type;
+        if (type === 2) {
+          const num = normalizeNumber(rawValue);
+          if (num === null) return;
+          fields[fieldName] = num;
+          return;
+        }
+        if (type === 5) {
+          const ts = toUnixTs(rawValue);
+          if (ts === null) return;
+          fields[fieldName] = ts;
+          return;
+        }
+        fields[fieldName] = String(rawValue);
+      };
+
+      const relatedKeys = [];
+      const records = [];
+      for (const raw of items) {
+        const body = raw?.fields || raw || {};
+        const relatedDealRecordIdRaw = String(
+          body.relatedDealRecordId || body.relatedDealRecord || ""
+        ).trim();
+        let relatedDealRecordId = relatedDealRecordIdRaw;
+        const dealId = String(body.relatedDealId || body.dealId || "").trim();
+        const dealSerialNo = String(body.relatedDealSerialNo || body.relatedDealNo || "").trim();
+        if (dealId) {
+          relatedDealRecordId =
+            (await resolveDealRecordIdByAny(dealId)) || relatedDealRecordId;
+        }
+        if (!relatedDealRecordId && dealSerialNo) {
+          relatedDealRecordId =
+            (await resolveDealRecordIdByAny(dealSerialNo)) || relatedDealRecordId;
+        }
+        if (!relatedDealRecordId && relatedDealRecordIdRaw && !looksLikeRecordId(relatedDealRecordIdRaw)) {
+          relatedDealRecordId =
+            (await resolveDealRecordIdByAny(relatedDealRecordIdRaw)) || relatedDealRecordId;
+        }
+        if (!relatedDealRecordId) {
+          return res.status(400).json({ success: false, error: "missing relatedDealRecordId" });
+        }
+
+        const fields = {};
+        fields[COST_FIELD.relatedDeal] = [relatedDealRecordId];
+        setTypedField(fields, COST_FIELD.period, body.period);
+        setTypedField(fields, COST_FIELD.amount, body.amount ?? body.currentAmount ?? body.newAmount);
+        setTypedField(fields, COST_FIELD.remark, String(body.remark || body.note || "").trim());
+
+        const createdDateRaw = body.createdDate || body.createdAt || "";
+        const createdDate =
+          createdDateRaw && String(createdDateRaw).trim()
+            ? String(createdDateRaw).trim()
+            : formatLocalDate(new Date());
+        setTypedField(fields, COST_FIELD.createdDate, createdDate);
+
+        records.push({ fields });
+        relatedKeys.push([relatedDealRecordId, relatedDealRecordIdRaw, dealSerialNo, dealId]);
+      }
+
+      const data = await batchCreateRecords({
+        appToken: COST_APP_TOKEN,
+        tableId: COST_TABLE_ID,
+        records,
+      });
+
+      const uniqueRelated = [];
+      const seen = new Set();
+      relatedKeys.forEach((keys) => {
+        const key = keys.map((k) => String(k || "").trim()).filter(Boolean).join("|");
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        uniqueRelated.push(keys);
+      });
+
+      const dealUpdates = await Promise.all(
+        uniqueRelated.map(async (keys) => {
+          try {
+            return await syncDealPaidThirdPartyCost(keys);
+          } catch (e) {
+            return { error: String(e) };
+          }
+        })
+      );
+
+      apiCache.delete("costs:all");
+      return res.json({ success: true, data, dealUpdates });
+    } catch (e) {
+      console.error("POST /api/costs/batch failed:", e);
+      return res.status(500).json({ success: false, error: String(e) });
+    }
+  });
+});
+
+app.put("/api/costs/:recordId", async (req, res) => {
+  return withIdempotency(req, res, async () => {
+    try {
+      if (!COST_APP_TOKEN || !COST_TABLE_ID) {
+        return res.status(500).json({
+          success: false,
+          error:
+            "missing cost appToken/tableId (FEISHU_COST_APP_TOKEN/FEISHU_BITABLE_COST_TABLE_ID or FEISHU_BITABLE_THIRD_PARTY_COST_TABLE_ID)",
+        });
+      }
+
+      const recordId = String(req.params.recordId || "").trim();
+      if (!recordId) {
+        return res.status(400).json({ success: false, error: "missing recordId" });
+      }
+
+      const body = req.body || {};
+      const fieldInfoMap = await getFieldInfoMap(COST_APP_TOKEN, COST_TABLE_ID);
+      const fields = {};
+
+      const normalizeNumber = (raw) => {
+        if (raw === null || raw === undefined || raw === "") return null;
+        if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+        const str = String(raw).replace(/[,\s¥￥]/g, "").trim();
+        if (!str) return null;
+        const num = Number(str);
+        return Number.isNaN(num) ? null : num;
+      };
+
+      const toUnixTs = (v) => {
+        if (v === undefined || v === null) return null;
+        if (typeof v === "number" && Number.isFinite(v)) return v < 1e11 ? v * 1000 : v;
+        const s = String(v).trim();
+        if (!s) return null;
+        if (/^\d+$/.test(s)) {
+          const num = Number(s);
+          if (!Number.isFinite(num)) return null;
+          return num < 1e11 ? num * 1000 : num;
+        }
+        const d = new Date(s.replace(/\//g, "-"));
+        if (Number.isNaN(d.getTime())) return null;
+        return d.getTime();
+      };
+
+      const setTypedField = (fieldName, rawValue) => {
+        const info = fieldInfoMap?.get(normalizeFieldName(fieldName));
+        if (info && isReadonlyField(fieldInfoMap, fieldName)) return;
+        const isEmptyString = typeof rawValue === "string" && rawValue.trim() === "";
+        if (rawValue === undefined || rawValue === null || isEmptyString) return;
+        const type = info?.type;
+        if (type === 2) {
+          const num = normalizeNumber(rawValue);
+          if (num === null) return;
+          fields[fieldName] = num;
+          return;
+        }
+        if (type === 5) {
+          const ts = toUnixTs(rawValue);
+          if (ts === null) return;
+          fields[fieldName] = ts;
+          return;
+        }
+        fields[fieldName] = String(rawValue);
+      };
+
+      setTypedField(COST_FIELD.amount, body.amount ?? body.currentAmount ?? body.newAmount);
+      setTypedField(COST_FIELD.remark, String(body.remark || body.note || "").trim());
+
+      const data = await updateRecord({
+        appToken: COST_APP_TOKEN,
+        tableId: COST_TABLE_ID,
+        recordId,
+        fields,
+      });
+
+      const refreshed = await getRecordById({
+        appToken: COST_APP_TOKEN,
+        tableId: COST_TABLE_ID,
+        recordId,
+      });
+      const relatedIds = parseRelationIds(
+        refreshed?.fields?.[COST_FIELD.relatedDeal] ||
+          refreshed?.fields?.relatedDeal ||
+          refreshed?.fields?.["关联立项"]
+      );
+
+      const dealUpdate = await syncDealPaidThirdPartyCost(relatedIds);
+      apiCache.delete("costs:all");
+      return res.json({ success: true, record_id: recordId, data, fields, dealUpdate });
+    } catch (e) {
+      console.error("PUT /api/costs/:recordId failed:", e);
+      return res.status(500).json({ success: false, error: String(e) });
+    }
+  });
+});
 
 app.get("/api/test-deal-fields", async (req, res) => {
 

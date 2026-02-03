@@ -71,7 +71,7 @@ type NewProjectDraft = {
 type UpdateProjectDraft = NewProjectDraft & { projectId: string }; // ⚠️ 不可变
 
 const makeLocalId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const PROJECT_AM_OPTIONS = ["张一", "郑铭"] as const;
+const PROJECT_AM_OPTIONS = ["张一", "邹思敏"] as const;
 const BD_USER_NAME_MAP: Record<string, string> = {
   zousimin: "邹思敏",
   yuanxiaonan: "袁晓南",
@@ -329,6 +329,31 @@ export default function DailyFormTab() {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [selectedTimeProjectId, setSelectedTimeProjectId] = useState("");
   const [hoursInput, setHoursInput] = useState("");
+  const [customerFieldOptions, setCustomerFieldOptions] = useState({
+    leadMonths: [...LEAD_MONTH_OPTIONS],
+    customerTypes: [...CUSTOMER_TYPE_OPTIONS],
+    levels: [...CLIENT_LEVEL_OPTIONS],
+    industries: [...INDUSTRY_OPTIONS],
+  });
+  const [projectFieldOptions, setProjectFieldOptions] = useState({
+    months: [...MONTH_OPTIONS],
+    serviceTypes: [...SERVICE_TYPE_OPTIONS],
+    platforms: [...PROJECT_PLATFORM_OPTIONS],
+    projectTypes: [...PROJECT_TYPE_OPTIONS],
+    stages: [...PROJECT_STAGE_OPTIONS],
+    priorities: [...PROJECT_PRIORITY_OPTIONS],
+  });
+
+  const leadMonthOptions = customerFieldOptions.leadMonths;
+  const customerTypeOptions = customerFieldOptions.customerTypes;
+  const customerLevelOptions = customerFieldOptions.levels;
+  const industryOptions = customerFieldOptions.industries;
+  const projectMonthOptions = projectFieldOptions.months;
+  const serviceTypeOptions = projectFieldOptions.serviceTypes;
+  const platformOptions = projectFieldOptions.platforms;
+  const projectTypeOptions = projectFieldOptions.projectTypes;
+  const projectStageOptions = projectFieldOptions.stages;
+  const projectPriorityOptions = projectFieldOptions.priorities;
 
   const activeBdName = useMemo(() => {
     const username = String(user?.username || "").trim();
@@ -389,6 +414,52 @@ export default function DailyFormTab() {
       console.warn("[DailyFormTab] loadProjectPersons failed:", e);
     }
   };
+
+  useEffect(() => {
+    const loadCustomerFieldOptions = async () => {
+      const data = await dataService.getCustomerFieldOptions([
+        "线索月份",
+        "客户类型",
+        "客户等级",
+        "行业大类",
+      ]);
+      setCustomerFieldOptions({
+        leadMonths: data["线索月份"]?.length ? data["线索月份"] : [...LEAD_MONTH_OPTIONS],
+        customerTypes: data["客户类型"]?.length ? data["客户类型"] : [...CUSTOMER_TYPE_OPTIONS],
+        levels: data["客户等级"]?.length ? data["客户等级"] : [...CLIENT_LEVEL_OPTIONS],
+        industries: data["行业大类"]?.length ? data["行业大类"] : [...INDUSTRY_OPTIONS],
+      });
+    };
+    loadCustomerFieldOptions();
+  }, []);
+
+  useEffect(() => {
+    const loadProjectFieldOptions = async () => {
+      const data = await dataService.getProjectFieldOptions([
+        "所属年月",
+        "所属月份",
+        "服务类型",
+        "平台",
+        "项目类别",
+        "项目进度",
+        "优先级",
+      ]);
+      const monthOptions = data["所属年月"]?.length
+        ? data["所属年月"]
+        : data["所属月份"]?.length
+          ? data["所属月份"]
+          : [...MONTH_OPTIONS];
+      setProjectFieldOptions({
+        months: monthOptions,
+        serviceTypes: data["服务类型"]?.length ? data["服务类型"] : [...SERVICE_TYPE_OPTIONS],
+        platforms: data["平台"]?.length ? data["平台"] : [...PROJECT_PLATFORM_OPTIONS],
+        projectTypes: data["项目类别"]?.length ? data["项目类别"] : [...PROJECT_TYPE_OPTIONS],
+        stages: data["项目进度"]?.length ? data["项目进度"] : [...PROJECT_STAGE_OPTIONS],
+        priorities: data["优先级"]?.length ? data["优先级"] : [...PROJECT_PRIORITY_OPTIONS],
+      });
+    };
+    loadProjectFieldOptions();
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -837,24 +908,24 @@ export default function DailyFormTab() {
                       value={newClientDraft.leadMonth}
                       onValueChange={(v) => setNewClientDraft({ ...newClientDraft, leadMonth: v })}
                       placeholder="选择线索月份"
-                      options={LEAD_MONTH_OPTIONS}
+                      options={leadMonthOptions}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>客户类型 *</Label>
-                    <OptionSelect value={newClientDraft.customerType} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, customerType: v })} placeholder="选择客户类型" options={CUSTOMER_TYPE_OPTIONS} />
+                    <OptionSelect value={newClientDraft.customerType} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, customerType: v })} placeholder="选择客户类型" options={customerTypeOptions} />
                   </div>
                   <div className="space-y-2">
                     <Label>客户等级 *</Label>
-                    <OptionSelect value={newClientDraft.level} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, level: v })} placeholder="选择等级" options={CLIENT_LEVEL_OPTIONS} />
+                    <OptionSelect value={newClientDraft.level} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, level: v })} placeholder="选择等级" options={customerLevelOptions} />
                   </div>
                   <div className="space-y-2">
                     <Label>行业 *</Label>
-                    <OptionSelect value={newClientDraft.industry} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, industry: v })} placeholder="选择行业" options={INDUSTRY_OPTIONS} />
+                    <OptionSelect value={newClientDraft.industry} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, industry: v })} placeholder="选择行业" options={industryOptions} />
                   </div>
                   <div className="space-y-2">
                     <Label>主AI策略</Label>
-                    <OptionSelect value={newClientDraft.ownerBd} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, ownerBd: v })} placeholder="选择AI策略（可选）" options={BD_OPTIONS} />
+                    <OptionSelect value={newClientDraft.ownerBd} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, ownerBd: v })} placeholder="选择BD" options={BD_OPTIONS} />
                   </div>
                   <div className="space-y-2 sm:col-span-2">
                     <Label>公司地区 *</Label>
@@ -977,7 +1048,7 @@ export default function DailyFormTab() {
                           value={updateClientDraft.leadMonth}
                           onValueChange={(v) => setUpdateClientDraft({ ...updateClientDraft, leadMonth: v })}
                           placeholder="选择线索月份"
-                          options={LEAD_MONTH_OPTIONS}
+                          options={leadMonthOptions}
                         />
                       </div>
                       <div className="space-y-2">
@@ -986,7 +1057,7 @@ export default function DailyFormTab() {
                           value={updateClientDraft.customerType}
                           onValueChange={(v) => setUpdateClientDraft({ ...updateClientDraft, customerType: v })}
                           placeholder="选择客户类型"
-                          options={CUSTOMER_TYPE_OPTIONS}
+                          options={customerTypeOptions}
                         />
                       </div>
                       <div className="space-y-2">
@@ -995,7 +1066,7 @@ export default function DailyFormTab() {
                           value={updateClientDraft.level}
                           onValueChange={(v) => setUpdateClientDraft({ ...updateClientDraft, level: v })}
                           placeholder="选择等级"
-                          options={CLIENT_LEVEL_OPTIONS}
+                          options={customerLevelOptions}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1015,7 +1086,7 @@ export default function DailyFormTab() {
                           value={updateClientDraft.industry}
                           onValueChange={(v) => setUpdateClientDraft({ ...updateClientDraft, industry: v })}
                           placeholder="选择行业"
-                          options={INDUSTRY_OPTIONS}
+                          options={industryOptions}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1023,7 +1094,7 @@ export default function DailyFormTab() {
                         <OptionSelect
                           value={updateClientDraft.ownerBd}
                           onValueChange={(v) => setUpdateClientDraft({ ...updateClientDraft, ownerBd: v })}
-                          placeholder="选择AI策略（可选）"
+                          placeholder="选择BD"
                           options={BD_OPTIONS}
                         />
                       </div>
@@ -1150,7 +1221,7 @@ export default function DailyFormTab() {
                       value={newProjectDraft.month}
                       onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, month: v })}
                       placeholder="选择月份"
-                      options={MONTH_OPTIONS}
+                      options={projectMonthOptions}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1159,7 +1230,7 @@ export default function DailyFormTab() {
                       value={newProjectDraft.serviceType}
                       onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, serviceType: v })}
                       placeholder="选择服务类型"
-                      options={SERVICE_TYPE_OPTIONS}
+                      options={serviceTypeOptions}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1175,7 +1246,7 @@ export default function DailyFormTab() {
                       value={newProjectDraft.platform}
                       onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, platform: v })}
                       placeholder="选择平台"
-                      options={PROJECT_PLATFORM_OPTIONS}
+                      options={platformOptions}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1184,7 +1255,7 @@ export default function DailyFormTab() {
                       value={newProjectDraft.projectType}
                       onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, projectType: v })}
                       placeholder="选择类别"
-                      options={PROJECT_TYPE_OPTIONS}
+                      options={projectTypeOptions}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1193,7 +1264,7 @@ export default function DailyFormTab() {
                       value={newProjectDraft.stage}
                       onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, stage: v })}
                       placeholder="选择进度"
-                      options={PROJECT_STAGE_OPTIONS}
+                      options={projectStageOptions}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1202,7 +1273,7 @@ export default function DailyFormTab() {
                       value={newProjectDraft.priority}
                       onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, priority: v })}
                       placeholder="选择优先级"
-                      options={PROJECT_PRIORITY_OPTIONS}
+                      options={projectPriorityOptions}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1214,11 +1285,11 @@ export default function DailyFormTab() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>AI策略 *</Label>
+                    <Label>BD *</Label>
                     <OptionSelect
                       value={newProjectDraft.bd}
                       onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, bd: v })}
-                      placeholder="选择AI策略"
+                      placeholder="选择BD"
                       options={
                         projectPersonOptions.bd.length > 0
                           ? projectPersonOptions.bd
@@ -1317,7 +1388,7 @@ export default function DailyFormTab() {
                           value={updateProjectDraft.month}
                           onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, month: v })}
                           placeholder="选择月份"
-                          options={MONTH_OPTIONS}
+                          options={projectMonthOptions}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1326,7 +1397,7 @@ export default function DailyFormTab() {
                           value={updateProjectDraft.serviceType}
                           onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, serviceType: v })}
                           placeholder="选择服务类型"
-                          options={SERVICE_TYPE_OPTIONS}
+                          options={serviceTypeOptions}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1339,7 +1410,7 @@ export default function DailyFormTab() {
                           value={updateProjectDraft.platform}
                           onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, platform: v })}
                           placeholder="选择平台"
-                          options={PROJECT_PLATFORM_OPTIONS}
+                          options={platformOptions}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1348,7 +1419,7 @@ export default function DailyFormTab() {
                           value={updateProjectDraft.projectType}
                           onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, projectType: v })}
                           placeholder="选择类别"
-                          options={PROJECT_TYPE_OPTIONS}
+                          options={projectTypeOptions}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1357,7 +1428,7 @@ export default function DailyFormTab() {
                           value={updateProjectDraft.stage}
                           onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, stage: v })}
                           placeholder="选择进度"
-                          options={PROJECT_STAGE_OPTIONS}
+                          options={projectStageOptions}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1366,7 +1437,7 @@ export default function DailyFormTab() {
                           value={updateProjectDraft.priority}
                           onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, priority: v })}
                           placeholder="选择优先级"
-                          options={PROJECT_PRIORITY_OPTIONS}
+                          options={projectPriorityOptions}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1374,13 +1445,13 @@ export default function DailyFormTab() {
                         <Input type="number" value={updateProjectDraft.expectedAmount} onChange={(e) => setUpdateProjectDraft({ ...updateProjectDraft, expectedAmount: e.target.value })} />
                       </div>
                       <div className="space-y-2">
-                        <Label>AI策略 *</Label>
+                        <Label>BD *</Label>
                         <OptionSelect
                           value={updateProjectDraft.bd}
                           onValueChange={(v) =>
                             setUpdateProjectDraft({ ...updateProjectDraft, bd: v })
                           }
-                          placeholder="选择AI策略"
+                          placeholder="选择BD"
                           options={
                             projectPersonOptions.bd.length > 0
                               ? projectPersonOptions.bd

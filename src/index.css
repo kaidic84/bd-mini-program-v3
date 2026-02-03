@@ -248,10 +248,15 @@
   }
 
   .miniapp-tabbar {
-    @apply fixed bottom-4 left-1/2 z-50 grid -translate-x-1/2 grid-cols-4 gap-1 rounded-full border border-border/70 bg-black/70 p-2 backdrop-blur;
-    width: min(520px, calc(100% - 2rem));
+    @apply fixed bottom-4 left-1/2 z-50 grid -translate-x-1/2 grid-cols-5 gap-1 rounded-full border border-border/70 bg-black/70 p-2 backdrop-blur;
+    width: min(640px, calc(100% - 2rem));
     background: linear-gradient(135deg, rgba(30, 19, 11, 0.86), rgba(16, 10, 6, 0.92));
     box-shadow: 0 28px 60px -36px rgba(255, 128, 64, 0.3);
+    --miniapp-tabbar-height: 104px;
+  }
+
+  .miniapp-main {
+    padding-bottom: calc(var(--miniapp-tabbar-height, 104px) + 2.5rem);
   }
 
   .miniapp-tabbar--compact {
@@ -260,7 +265,7 @@
   }
 
   .miniapp-tab {
-    @apply flex flex-col items-center justify-center gap-1 rounded-full px-2 py-2 text-[11px] font-medium transition-colors;
+    @apply flex flex-col items-center justify-center gap-1 rounded-full px-2 py-1.5 text-[10px] font-medium transition-colors;
     color: hsl(var(--foreground) / 0.6);
   }
 
@@ -283,9 +288,10 @@
 
     .miniapp-tabbar {
       bottom: 1.75rem;
-      gap: 0.5rem;
-      padding: 0.75rem 1rem;
-      width: min(720px, calc(100% - 6rem));
+      gap: 0.4rem;
+      padding: 0.65rem 0.9rem;
+      width: min(760px, calc(100% - 6rem));
+      --miniapp-tabbar-height: 96px;
     }
 
     .miniapp-tabbar--compact {
@@ -293,9 +299,9 @@
     }
 
     .miniapp-tab {
-      font-size: 12px;
-      gap: 0.4rem;
-      padding: 0.55rem 0.85rem;
+      font-size: 11px;
+      gap: 0.35rem;
+      padding: 0.45rem 0.7rem;
     }
   }
 }

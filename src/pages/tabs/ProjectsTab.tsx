@@ -127,10 +127,55 @@ const ProjectsTab: React.FC = () => {
   const [monthFilter, setMonthFilter] = useState<string>('all');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [projectFilterOptions, setProjectFilterOptions] = useState({
+    stages: [...PROJECT_STAGE_OPTIONS],
+    types: [...PROJECT_TYPE_OPTIONS],
+    serviceTypes: [...SERVICE_TYPE_OPTIONS],
+    priorities: [...PROJECT_PRIORITY_OPTIONS],
+    months: Array.from({ length: 12 }, (_, i) => String(i + 1)),
+  });
 
   useEffect(() => {
     loadProjects();
   }, []);
+
+  useEffect(() => {
+    let timer: number | null = null;
+    const syncOptions = async () => {
+      const data = await dataService.getProjectFieldOptions([
+        '所属年月',
+        '所属月份',
+        '服务类型',
+        '项目类别',
+        '项目进度',
+        '优先级',
+      ]);
+      const months =
+        data['所属年月']?.length
+          ? data['所属年月']
+          : data['所属月份']?.length
+            ? data['所属月份']
+            : Array.from({ length: 12 }, (_, i) => String(i + 1));
+      const next = {
+        stages: data['项目进度']?.length ? data['项目进度'] : [...PROJECT_STAGE_OPTIONS],
+        types: data['项目类别']?.length ? data['项目类别'] : [...PROJECT_TYPE_OPTIONS],
+        serviceTypes: data['服务类型']?.length ? data['服务类型'] : [...SERVICE_TYPE_OPTIONS],
+        priorities: data['优先级']?.length ? data['优先级'] : [...PROJECT_PRIORITY_OPTIONS],
+        months,
+      };
+      setProjectFilterOptions(next);
+      if (stageFilter !== 'all' && !next.stages.includes(stageFilter)) setStageFilter('all');
+      if (typeFilter !== 'all' && !next.types.includes(typeFilter)) setTypeFilter('all');
+      if (serviceTypeFilter !== 'all' && !next.serviceTypes.includes(serviceTypeFilter)) setServiceTypeFilter('all');
+      if (priorityFilter !== 'all' && !next.priorities.includes(priorityFilter)) setPriorityFilter('all');
+      if (monthFilter !== 'all' && !next.months.includes(monthFilter)) setMonthFilter('all');
+    };
+    syncOptions();
+    timer = window.setInterval(syncOptions, 30000);
+    return () => {
+      if (timer) window.clearInterval(timer);
+    };
+  }, [monthFilter, priorityFilter, serviceTypeFilter, stageFilter, typeFilter]);
 
   useEffect(() => {
     filterProjects();
@@ -148,7 +193,8 @@ const ProjectsTab: React.FC = () => {
       const keyword = searchKeyword.toLowerCase();
       result = result.filter((p) =>
         (p.projectName || '').toLowerCase().includes(keyword) ||
-        (p.shortName || '').toLowerCase().includes(keyword),
+        (p.shortName || '').toLowerCase().includes(keyword) ||
+        String(p.projectId || '').toLowerCase().includes(keyword),
       );
     }
 
@@ -173,19 +219,22 @@ const ProjectsTab: React.FC = () => {
     }
 
     if (monthFilter !== 'all') {
-      const extractMonth = (raw: any) => {
+      const normalizeMonthKey = (raw: any) => {
         if (raw === null || raw === undefined) return '';
         const str = String(raw).trim();
         if (!str) return '';
-        const match = str.match(/(\d{1,2})\s*$/);
-        if (match) return String(Number(match[1]));
-        const parts = str.replace(/\//g, '.').replace(/-/g, '.').split('.');
-        const last = parts[parts.length - 1];
-        if (!last) return '';
-        const n = Number(last);
-        return Number.isFinite(n) ? String(n) : '';
+        const match = str.match(/(\d{4})\D*?(\d{1,2})/);
+        if (match) {
+          const year = match[1];
+          const month = String(match[2]).padStart(2, '0');
+          return `${year}-${month}`;
+        }
+        const only = str.replace(/[^\d]/g, '');
+        if (only.length >= 6) return `${only.slice(0, 4)}-${only.slice(4, 6)}`;
+        if (only.length >= 5) return `${only.slice(0, 4)}-0${only.slice(4, 5)}`;
+        return str;
       };
-      result = result.filter((p) => Number(extractMonth(p.month)) === Number(monthFilter));
+      result = result.filter((p) => normalizeMonthKey(p.month) === normalizeMonthKey(monthFilter));
     }
 
     result.sort((a, b) => {
@@ -261,7 +310,7 @@ const ProjectsTab: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">全部进度</SelectItem>
-                    {PROJECT_STAGE_OPTIONS.map((stage) => (
+                    {projectFilterOptions.stages.map((stage) => (
                       <SelectItem key={stage} value={stage}>
                         {stage}
                       </SelectItem>
@@ -274,7 +323,7 @@ const ProjectsTab: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">全部类别</SelectItem>
-                    {PROJECT_TYPE_OPTIONS.map((type) => (
+                    {projectFilterOptions.types.map((type) => (
                       <SelectItem key={type} value={type}>
                         {type}
                       </SelectItem>
@@ -287,7 +336,7 @@ const ProjectsTab: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">全部服务</SelectItem>
-                    {SERVICE_TYPE_OPTIONS.map((type) => (
+                    {projectFilterOptions.serviceTypes.map((type) => (
                       <SelectItem key={type} value={type}>
                         {type}
                       </SelectItem>
@@ -300,7 +349,7 @@ const ProjectsTab: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">全部优先级</SelectItem>
-                    {PROJECT_PRIORITY_OPTIONS.map((p) => (
+                    {projectFilterOptions.priorities.map((p) => (
                       <SelectItem key={p} value={p}>
                         {p}
                       </SelectItem>
@@ -327,7 +376,7 @@ const ProjectsTab: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">全部月份</SelectItem>
-                    {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((month) => (
+                    {projectFilterOptions.months.map((month) => (
                       <SelectItem key={month} value={month}>
                         {month}
                       </SelectItem>

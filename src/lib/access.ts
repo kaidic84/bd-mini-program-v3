@@ -1,6 +1,7 @@
 export type Access = {
   full: boolean;
   canDaily: boolean;
+  canCostEntry: boolean;
   canReminders: boolean;
   canUsage: boolean;
   canBusinessClients: boolean;
@@ -18,6 +19,7 @@ export function getAccess(userName: string): Access {
     return {
       full: true,
       canDaily: true,
+      canCostEntry: true,
       canReminders: true,
       canUsage: true,
       canBusinessClients: true,
@@ -31,6 +33,7 @@ export function getAccess(userName: string): Access {
     return {
       full: false,
       canDaily: false,
+      canCostEntry: false,
       canReminders: false,
       canUsage: false,
       canBusinessClients: true,
@@ -43,6 +46,7 @@ export function getAccess(userName: string): Access {
   return {
     full: false,
     canDaily: false,
+    canCostEntry: false,
     canReminders: false,
     canUsage: false,
     canBusinessClients: true,

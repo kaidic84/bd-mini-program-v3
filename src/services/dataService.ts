@@ -14,6 +14,7 @@ import type {
   Project,
   Deal,
   DailyFormData,
+  CostEntry,
   ReminderItem,
   UnfinishedReminderItem,
   FinishedReminderItem,
@@ -434,6 +435,63 @@ export const dataService = {
     }
   },
 
+  async getCustomerFieldOptions(fields?: string[]): Promise<Record<string, string[]>> {
+    try {
+      const search = new URLSearchParams();
+      if (fields && fields.length > 0) {
+        search.set("fields", fields.join(","));
+      }
+      const query = search.toString();
+      const url = query ? `/api/customer-field-options?${query}` : "/api/customer-field-options";
+      const { res, json } = await fetchJson(url, { cache: "no-store" });
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `Request failed with status ${res.status}`);
+      }
+      return (json?.data || {}) as Record<string, string[]>;
+    } catch (e) {
+      console.error("[dataService] getCustomerFieldOptions failed:", e);
+      return {};
+    }
+  },
+
+  async getProjectFieldOptions(fields?: string[]): Promise<Record<string, string[]>> {
+    try {
+      const search = new URLSearchParams();
+      if (fields && fields.length > 0) {
+        search.set("fields", fields.join(","));
+      }
+      const query = search.toString();
+      const url = query ? `/api/project-field-options?${query}` : "/api/project-field-options";
+      const { res, json } = await fetchJson(url, { cache: "no-store" });
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `Request failed with status ${res.status}`);
+      }
+      return (json?.data || {}) as Record<string, string[]>;
+    } catch (e) {
+      console.error("[dataService] getProjectFieldOptions failed:", e);
+      return {};
+    }
+  },
+
+  async getDealFieldOptions(fields?: string[]): Promise<Record<string, string[]>> {
+    try {
+      const search = new URLSearchParams();
+      if (fields && fields.length > 0) {
+        search.set("fields", fields.join(","));
+      }
+      const query = search.toString();
+      const url = query ? `/api/deal-field-options?${query}` : "/api/deal-field-options";
+      const { res, json } = await fetchJson(url, { cache: "no-store" });
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `Request failed with status ${res.status}`);
+      }
+      return (json?.data || {}) as Record<string, string[]>;
+    } catch (e) {
+      console.error("[dataService] getDealFieldOptions failed:", e);
+      return {};
+    }
+  },
+
   async getDealById(dealId: string): Promise<Deal | undefined> {
     const deals = await dataService.getAllDeals();
     return deals.find((d: any) => d?.dealId === dealId);
@@ -478,6 +536,126 @@ export const dataService = {
         return feishuBitableApi.updateDeal(dealId, data);
       }
       return false;
+    }
+  },
+
+  // ==================== 三方成本明细 ====================
+
+  async getCostEntries(params?: {
+    projectName?: string;
+    projectId?: string;
+    relatedDealRecordId?: string;
+    relatedDealId?: string;
+    relatedDealSerialNo?: string;
+    fresh?: boolean;
+  }): Promise<CostEntry[]> {
+    try {
+      const search = new URLSearchParams();
+      if (params?.projectName) search.set('projectName', params.projectName);
+      if (params?.projectId) search.set('projectId', params.projectId);
+      if (params?.relatedDealRecordId) search.set('relatedDealRecordId', params.relatedDealRecordId);
+      if (params?.relatedDealId) search.set('relatedDealId', params.relatedDealId);
+      if (params?.relatedDealSerialNo) search.set('relatedDealSerialNo', params.relatedDealSerialNo);
+      if (params?.fresh) search.set('fresh', '1');
+      const query = search.toString();
+      const url = query ? `/api/costs?${query}` : '/api/costs';
+      const { res, json } = await fetchJson(url, { cache: 'no-store' });
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `Request failed with status ${res.status}`);
+      }
+      return (json?.data || []) as CostEntry[];
+    } catch (e) {
+      console.error('[dataService] getCostEntries via backend failed, fallback to mockDb:', e);
+      const all = mockDb.getAllCostEntries();
+      if (!params) return all;
+      return all.filter((entry) => {
+        if (params.projectName) {
+          const name = String(entry.projectName || '').toLowerCase();
+          if (!name.includes(String(params.projectName || '').toLowerCase())) return false;
+        }
+        if (params.projectId && String(entry.projectId || '') !== String(params.projectId || '')) return false;
+        if (params.relatedDealRecordId) {
+          const related = entry.relatedDealRecordIds || [];
+          if (!related.includes(String(params.relatedDealRecordId || ''))) return false;
+        } else if (params.relatedDealId) {
+          const related = entry.relatedDealRecordIds || [];
+          if (!related.includes(String(params.relatedDealId || ''))) return false;
+        } else if (params.relatedDealSerialNo) {
+          const related = entry.relatedDealRecordIds || [];
+          if (!related.includes(String(params.relatedDealSerialNo || ''))) return false;
+        }
+        return true;
+      });
+    }
+  },
+
+  async updateCostEntry(recordId: string, data: Partial<CostEntry>): Promise<boolean> {
+    const id = String(recordId || "").trim();
+    if (!id) return false;
+    try {
+      const { res, json } = await fetchJson(`/api/costs/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify(data || {}),
+      });
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `Request failed with status ${res.status}`);
+      }
+      return true;
+    } catch (e) {
+      console.error("[dataService] updateCostEntry failed:", e);
+      return false;
+    }
+  },
+
+  async createCostEntriesBatch(entries: Array<Partial<CostEntry>>): Promise<boolean> {
+    if (!entries || entries.length === 0) return true;
+    try {
+      const { res, json } = await fetchJson(`/api/costs/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ records: entries }),
+      });
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `Request failed with status ${res.status}`);
+      }
+      return true;
+    } catch (e) {
+      console.error("[dataService] createCostEntriesBatch failed:", e);
+      return false;
+    }
+  },
+
+  async createCostEntry(data: {
+    relatedDealRecordId?: string;
+    relatedDealId?: string;
+    relatedDealSerialNo?: string;
+    period: number;
+    amount: number;
+    remark?: string;
+    createdDate?: string;
+  }): Promise<CostEntry> {
+    try {
+      const { res, json } = await fetchJson('/api/costs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify(data || {}),
+      });
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `Request failed with status ${res.status}`);
+      }
+      return {
+        recordId: json?.record_id,
+        relatedDealRecordId: data.relatedDealRecordId,
+        relatedDealRecordIds: data.relatedDealRecordId ? [data.relatedDealRecordId] : [],
+        period: data.period,
+        amount: data.amount,
+        remark: data.remark,
+        createdDate: data.createdDate,
+      } as CostEntry;
+    } catch (e) {
+      console.error('[dataService] createCostEntry via backend failed:', e);
+      throw e;
     }
   },
 
