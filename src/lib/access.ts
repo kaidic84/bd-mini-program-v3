@@ -10,8 +10,14 @@ export type Access = {
   canProjectAmount: boolean;
 };
 
-const FULL_ACCESS_USERS = new Set(["袁晓南", "邹思敏", "黄毅", "陈凯蒂", "侯昭薇", "孟子俊"]);
+const FULL_ACCESS_USERS = new Set(["袁晓南", "邹思敏", "黄毅", "陈凯蒂", "侯昭薇", "孟子俊", "徐泽玄"]);
 const LIMITED_FULL_BUSINESS_USERS = new Set(["张一", "郑铭"]);
+const PM_USERS = new Set(["刘漫章"]);
+
+export function isPmUser(userName: string) {
+  const name = String(userName || "").trim();
+  return PM_USERS.has(name);
+}
 
 export function getAccess(userName: string): Access {
   const name = String(userName || "").trim();

@@ -5,8 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { LayoutGrid } from "lucide-react";
 import type { KanbanBoard } from "@/types/bd";
+import { useAuth } from "@/contexts/AuthContext";
+import { isPmUser } from "@/lib/access";
 
 const KanbanTab: React.FC = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [boards, setBoards] = React.useState<KanbanBoard[]>([]);
@@ -47,10 +50,28 @@ const KanbanTab: React.FC = () => {
     void loadBoards();
   }, [loadBoards]);
 
+  const visibleBoards = React.useMemo(() => {
+    const name = user?.name || user?.username || "";
+    if (isPmUser(name)) {
+      return boards.filter((board) => board.name !== "立项看板");
+    }
+    return boards;
+  }, [boards, user?.name, user?.username]);
+
+  React.useEffect(() => {
+    if (!visibleBoards.length) {
+      setActiveBoardId("");
+      return;
+    }
+    if (!visibleBoards.some((board) => board.id === activeBoardId)) {
+      setActiveBoardId(String(visibleBoards[0]?.id || ""));
+    }
+  }, [visibleBoards, activeBoardId]);
+
   const activeBoard = React.useMemo(() => {
-    if (!boards.length) return null;
-    return boards.find((board) => board.id === activeBoardId) || boards[0];
-  }, [boards, activeBoardId]);
+    if (!visibleBoards.length) return null;
+    return visibleBoards.find((board) => board.id === activeBoardId) || visibleBoards[0];
+  }, [visibleBoards, activeBoardId]);
 
   React.useEffect(() => {
     if (!activeBoard) {
@@ -79,14 +100,14 @@ const KanbanTab: React.FC = () => {
         </CardHeader>
       </Card>
 
-      {!loading && boards.length > 0 && (
+      {!loading && visibleBoards.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">选择看板</CardTitle>
             <CardDescription>切换不同看板视角查看各板块的业务进度。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            {boards.map((board, index) => {
+            {visibleBoards.map((board, index) => {
               const isActive = board.id === (activeBoard?.id || "");
               return (
                 <Button
