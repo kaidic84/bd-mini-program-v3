@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { cn } from "@/lib/utils";
 
 type PendingCostEntry = {
   localId: string;
@@ -53,6 +54,9 @@ const parseNonNegativeNumber = (value: string) => {
 
 const looksLikeRecordId = (value: string) => /^rec[a-z0-9]+/i.test(String(value || "").trim());
 
+const errorRingClass = "border-destructive focus-visible:ring-destructive";
+const errorTextClass = "text-xs text-destructive";
+
 const resolveDealProjectName = (deal: Deal, projectNameMap: Map<string, string>) => {
   const direct = String(deal.projectName || "").trim();
   if (direct) return direct;
@@ -72,6 +76,7 @@ export default function CostEntryTab() {
   const [existingEntriesMap, setExistingEntriesMap] = useState<Record<string, CostEntry[]>>({});
   const [pendingEntries, setPendingEntries] = useState<PendingCostEntry[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [entryErrors, setEntryErrors] = useState<{ deal?: string; amount?: string }>({});
   const [editDealKey, setEditDealKey] = useState("");
   const [editResults, setEditResults] = useState<CostEntry[]>([]);
   const [editLoading, setEditLoading] = useState(false);
@@ -239,14 +244,27 @@ export default function CostEntryTab() {
   useEffect(() => {
     setAmountInput("");
     setRemarkInput("");
+    setEntryErrors((prev) => {
+      if (!prev.deal) return prev;
+      const next = { ...prev };
+      delete next.deal;
+      return next;
+    });
   }, [selectedDealKey]);
 
   const appendPendingEntry = () => {
-    if (!selectedDeal) return toast.error("请先选择项目名称");
+    const nextErrors: { deal?: string; amount?: string } = {};
+    if (!selectedDeal) nextErrors.deal = "请选择项目名称";
     const periodValue = parsePositiveNumber(currentPeriod);
     if (!periodValue) return toast.error("当前期数异常，请稍后重试");
     const amountValue = parseNonNegativeNumber(amountInput);
-    if (amountValue === null) return toast.error("请输入有效的本期新增金额");
+    if (amountValue === null) nextErrors.amount = "请输入有效的本期新增金额";
+    if (Object.keys(nextErrors).length > 0) {
+      setEntryErrors(nextErrors);
+      if (nextErrors.deal && !nextErrors.amount) return toast.error("请先选择项目名称");
+      if (nextErrors.amount && !nextErrors.deal) return toast.error("请输入有效的本期新增金额");
+      return toast.error("请先选择项目名称并输入金额");
+    }
     const remarkValue = remarkInput.trim();
     setPendingEntries((prev) => [
       ...prev,
@@ -265,6 +283,7 @@ export default function CostEntryTab() {
     ]);
     setAmountInput("");
     setRemarkInput("");
+    setEntryErrors({});
   };
 
   const handleSearchEdit = async () => {
@@ -375,12 +394,22 @@ export default function CostEntryTab() {
   const handleSubmit = async () => {
     const entriesToSubmit: PendingCostEntry[] = [...pendingEntries];
     if (amountInput.trim()) {
-      if (!selectedDeal) return toast.error("请先选择项目名称");
+      const nextErrors: { deal?: string; amount?: string } = {};
+      if (!selectedDeal) {
+        nextErrors.deal = "请选择项目名称";
+        setEntryErrors(nextErrors);
+        return toast.error("请先选择项目名称");
+      }
       if (!selectedDealRecordId && !selectedDealId) return toast.error("该立项缺少ID，无法写入成本");
       const periodValue = parsePositiveNumber(currentPeriod);
       if (!periodValue) return toast.error("当前期数异常，请稍后重试");
       const amountValue = parseNonNegativeNumber(amountInput);
-      if (amountValue === null) return toast.error("请输入有效的本期新增金额");
+      if (amountValue === null) {
+        nextErrors.amount = "请输入有效的本期新增金额";
+        setEntryErrors(nextErrors);
+        return toast.error("请输入有效的本期新增金额");
+      }
+      setEntryErrors({});
       entriesToSubmit.push({
         localId: makeLocalId(),
         dealKey: selectedDealKey,
@@ -395,11 +424,14 @@ export default function CostEntryTab() {
       });
     }
     if (!selectedDeal && entriesToSubmit.length === 0) {
+      setEntryErrors({ deal: "请选择项目名称" });
       return toast.error("请先选择项目名称");
     }
     if (entriesToSubmit.length === 0) {
+      setEntryErrors({ amount: "请先填写本期新增金额或添加待提交记录" });
       return toast.error("请先填写本期新增金额或添加待提交记录");
     }
+    setEntryErrors({});
 
     setIsSubmitting(true);
     try {
@@ -489,12 +521,24 @@ export default function CostEntryTab() {
             <SearchableSelect
               options={dealOptionData.options}
               value={selectedDealKey}
-              onChange={setSelectedDealKey}
+              onChange={(value) => {
+                setSelectedDealKey(value);
+                if (value) {
+                  setEntryErrors((prev) => {
+                    if (!prev.deal) return prev;
+                    const next = { ...prev };
+                    delete next.deal;
+                    return next;
+                  });
+                }
+              }}
               placeholder={isLoading ? "加载中..." : "搜索项目名称"}
               searchPlaceholder="输入项目名称或项目ID..."
               emptyText="未找到匹配的项目"
               disabled={isPageBusy}
+              className={cn(entryErrors.deal && errorRingClass)}
             />
+            {entryErrors.deal && <p className={errorTextClass}>{entryErrors.deal}</p>}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -514,10 +558,24 @@ export default function CostEntryTab() {
               <Label>本期新增金额 *</Label>
               <Input
                 value={amountInput}
-                onChange={(e) => setAmountInput(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setAmountInput(value);
+                  const parsed = parseNonNegativeNumber(value);
+                  if (parsed !== null || value.trim() === "") {
+                    setEntryErrors((prev) => {
+                      if (!prev.amount) return prev;
+                      const next = { ...prev };
+                      delete next.amount;
+                      return next;
+                    });
+                  }
+                }}
                 placeholder="例如：¥10,000"
                 disabled={isPageBusy}
+                className={cn(entryErrors.amount && errorRingClass)}
               />
+              {entryErrors.amount && <p className={errorTextClass}>{entryErrors.amount}</p>}
             </div>
           </div>
 

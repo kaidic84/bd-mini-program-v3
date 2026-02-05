@@ -227,6 +227,7 @@ export interface KanbanBoard {
   id: string;
   name: string;
   description?: string;
+  embedUrl?: string | null;
 }
 
 export interface KanbanColumn {

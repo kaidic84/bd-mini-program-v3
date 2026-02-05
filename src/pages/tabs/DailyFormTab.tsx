@@ -69,22 +69,62 @@ type NewProjectDraft = {
 };
 
 type UpdateProjectDraft = NewProjectDraft & { projectId: string }; // ⚠️ 不可变
+type NewClientField = "shortName" | "companyName" | "customerType" | "level" | "industry" | "hq";
+type ProjectField =
+  | "customerId"
+  | "month"
+  | "serviceType"
+  | "campaignName"
+  | "platform"
+  | "projectType"
+  | "stage"
+  | "priority"
+  | "bd";
+type TimeEntryField = "project" | "hours" | "entries";
 
 const makeLocalId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const PROJECT_AM_OPTIONS = ["张一", "邹思敏"] as const;
+const PROJECT_AM_OPTIONS = ["张一", "邹思敏", "黄毅"] as const;
 const BD_USER_NAME_MAP: Record<string, string> = {
   zousimin: "邹思敏",
   yuanxiaonan: "袁晓南",
   huangyi: "黄毅",
 };
 const REQUEST_CONCURRENCY = 3;
+const errorRingClass = "border-destructive focus-visible:ring-destructive";
+const errorTextClass = "text-xs text-destructive";
 
 const isBlank = (v: unknown) => !String(v ?? "").trim();
+const hasError = <T extends string>(errors: T[], field: T) => errors.includes(field);
 const numOrUndef = (v: string) => {
   const s = String(v ?? "").trim();
   if (!s) return undefined;
   const n = Number(s);
   return Number.isFinite(n) ? n : undefined;
+};
+
+const getNewClientErrors = (c: NewClientDraft): NewClientField[] => {
+  const errors: NewClientField[] = [];
+  if (isBlank(c.shortName)) errors.push("shortName");
+  if (isBlank(c.companyName)) errors.push("companyName");
+  if (isBlank(c.customerType)) errors.push("customerType");
+  if (isBlank(c.level)) errors.push("level");
+  if (isBlank(c.industry)) errors.push("industry");
+  if (isBlank(c.hq)) errors.push("hq");
+  return errors;
+};
+
+const getProjectErrors = (p: NewProjectDraft): ProjectField[] => {
+  const errors: ProjectField[] = [];
+  if (isBlank(p.customerId)) errors.push("customerId");
+  if (isBlank(p.month)) errors.push("month");
+  if (isBlank(p.serviceType)) errors.push("serviceType");
+  if (isBlank(p.campaignName)) errors.push("campaignName");
+  if (isBlank(p.platform)) errors.push("platform");
+  if (isBlank(p.projectType)) errors.push("projectType");
+  if (isBlank(p.stage)) errors.push("stage");
+  if (isBlank(p.priority)) errors.push("priority");
+  if (isBlank(p.bd)) errors.push("bd");
+  return errors;
 };
 
 const runWithLimit = async <T,>(items: T[], limit: number, worker: (item: T) => Promise<void>) => {
@@ -236,15 +276,22 @@ function OptionSelect({
   onValueChange,
   placeholder,
   options,
+  error,
+  triggerClassName,
 }: {
   value: string;
   onValueChange: (v: string) => void;
   placeholder: string;
   options: readonly string[];
+  error?: boolean;
+  triggerClassName?: string;
 }) {
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger>
+      <SelectTrigger
+        className={cn(triggerClassName, error && errorRingClass)}
+        aria-invalid={error}
+      >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
@@ -329,6 +376,11 @@ export default function DailyFormTab() {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [selectedTimeProjectId, setSelectedTimeProjectId] = useState("");
   const [hoursInput, setHoursInput] = useState("");
+  const [newClientErrors, setNewClientErrors] = useState<NewClientField[]>([]);
+  const [updateClientErrors, setUpdateClientErrors] = useState<NewClientField[]>([]);
+  const [newProjectErrors, setNewProjectErrors] = useState<ProjectField[]>([]);
+  const [updateProjectErrors, setUpdateProjectErrors] = useState<ProjectField[]>([]);
+  const [timeEntryErrors, setTimeEntryErrors] = useState<TimeEntryField[]>([]);
   const [customerFieldOptions, setCustomerFieldOptions] = useState({
     leadMonths: [...LEAD_MONTH_OPTIONS],
     customerTypes: [...CUSTOMER_TYPE_OPTIONS],
@@ -467,6 +519,26 @@ export default function DailyFormTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    setNewClientErrors([]);
+    setUpdateClientErrors([]);
+  }, [customerAction]);
+
+  useEffect(() => {
+    setNewProjectErrors([]);
+    setUpdateProjectErrors([]);
+  }, [projectAction]);
+
+  useEffect(() => {
+    setTimeEntryErrors([]);
+  }, [currentStep]);
+
+  useEffect(() => {
+    if (timeEntries.length > 0) {
+      setTimeEntryErrors((prev) => prev.filter((field) => field !== "entries"));
+    }
+  }, [timeEntries.length]);
+
 
   const clientSearchResults = useMemo(() => {
     const k = clientSearchKeyword.trim().toLowerCase();
@@ -546,15 +618,25 @@ export default function DailyFormTab() {
   );
 
   const handleAddTimeEntry = () => {
-    if (!selectedTimeProjectId || !hoursInput) return toast.error("请选择项目并输入时间");
+    const nextErrors: TimeEntryField[] = [];
+    if (!selectedTimeProjectId) nextErrors.push("project");
+    if (!hoursInput) nextErrors.push("hours");
+    if (nextErrors.length > 0) {
+      setTimeEntryErrors((prev) => Array.from(new Set([...prev.filter((f) => f === "entries"), ...nextErrors])));
+      return toast.error("请选择项目并输入时间");
+    }
     const hours = parseFloat(hoursInput);
-    if (!Number.isFinite(hours) || hours <= 0) return toast.error("请输入有效的时间（小时）");
+    if (!Number.isFinite(hours) || hours <= 0) {
+      setTimeEntryErrors((prev) => Array.from(new Set([...prev.filter((f) => f === "entries"), "hours"])));
+      return toast.error("请输入有效的时间（小时）");
+    }
     const project = projects.find((p: any) => p.projectId === selectedTimeProjectId) as any;
     if (!project) return;
     if (timeEntries.some((e) => e.projectId === selectedTimeProjectId)) return toast.error("该项目已添加");
     setTimeEntries((prev) => [...prev, { projectId: selectedTimeProjectId, projectName: project.projectName, hours }]);
     setSelectedTimeProjectId("");
     setHoursInput("");
+    setTimeEntryErrors((prev) => prev.filter((field) => field !== "project" && field !== "hours"));
   };
 
   const markDailyUsage = async () => {
@@ -576,7 +658,10 @@ export default function DailyFormTab() {
   };
 
   const handleSubmit = async () => {
-    if (timeEntries.length === 0) return toast.error("请至少添加一个项目的时间记录");
+    if (timeEntries.length === 0) {
+      setTimeEntryErrors((prev) => Array.from(new Set([...prev, "entries"])));
+      return toast.error("请至少添加一个项目的时间记录");
+    }
     try {
       const today = formatDateSlash(new Date());
       await runWithLimit(timeEntries, REQUEST_CONCURRENCY, async (entry) => {
@@ -659,7 +744,12 @@ export default function DailyFormTab() {
 
       if (hasNew) {
         for (let i = 0; i < newCandidates.length; i += 1) {
-          if (!validateNewClient(newCandidates[i])) return toast.error(`第 ${i + 1} 个客户信息未填完整（带 * 的必填）`);
+          if (!validateNewClient(newCandidates[i])) {
+            if (newCandidates[i].localId === newClientDraft.localId) {
+              setNewClientErrors(getNewClientErrors(newClientDraft));
+            }
+            return toast.error(`第 ${i + 1} 个客户信息未填完整（带 * 的必填）`);
+          }
         }
         try {
           await runWithLimit(newCandidates, REQUEST_CONCURRENCY, async (c) => {
@@ -680,6 +770,7 @@ export default function DailyFormTab() {
           toast.success(`客户创建成功（已写回飞书）：${newCandidates.length} 个`);
           setNewClientDrafts([]);
           setNewClientDraft(makeEmptyNewClient());
+          setNewClientErrors([]);
         } catch (e: any) {
           console.error(e);
           return toast.error(e?.message || "创建客户失败");
@@ -688,7 +779,12 @@ export default function DailyFormTab() {
       if (hasUpdate) {
         for (let i = 0; i < updateCandidates.length; i += 1) {
           const c = updateCandidates[i];
-          if (isBlank(c.customerId) || !validateNewClient(c)) return toast.error(`第 ${i + 1} 个客户信息未填完整（带 * 的必填）`);
+          if (isBlank(c.customerId) || !validateNewClient(c)) {
+            if (updateClientDraft && c.localId === updateClientDraft.localId) {
+              setUpdateClientErrors(getNewClientErrors(updateClientDraft));
+            }
+            return toast.error(`第 ${i + 1} 个客户信息未填完整（带 * 的必填）`);
+          }
         }
         try {
           await runWithLimit(updateCandidates, REQUEST_CONCURRENCY, async (c) => {
@@ -703,6 +799,7 @@ export default function DailyFormTab() {
           setUpdateClientDrafts([]);
           setUpdateClientDraft(null);
           setClientSearchKeyword("");
+          setUpdateClientErrors([]);
         } catch (e: any) {
           console.error(e);
           return toast.error(e?.message || "更新客户失败");
@@ -749,7 +846,12 @@ export default function DailyFormTab() {
 
       if (hasNew) {
         for (let i = 0; i < newCandidates.length; i += 1) {
-          if (!validateNewProject(newCandidates[i])) return toast.error(`第 ${i + 1} 条项目必填项未填完整（带 * 的必填）`);
+          if (!validateNewProject(newCandidates[i])) {
+            if (newCandidates[i].localId === newProjectDraft.localId) {
+              setNewProjectErrors(getProjectErrors(newProjectDraft));
+            }
+            return toast.error(`第 ${i + 1} 条项目必填项未填完整（带 * 的必填）`);
+          }
         }
         try {
           await runWithLimit(newCandidates, REQUEST_CONCURRENCY, async (p) => {
@@ -779,6 +881,7 @@ export default function DailyFormTab() {
           setNewProjectDrafts([]);
           setNewProjectDraft(makeEmptyNewProjectDraft());
           setNewProjectCustomerKeyword("");
+          setNewProjectErrors([]);
         } catch (e: any) {
           console.error(e);
           return toast.error(e?.message || "创建项目失败");
@@ -788,7 +891,12 @@ export default function DailyFormTab() {
       if (hasUpdate) {
         for (let i = 0; i < updateCandidates.length; i += 1) {
           const p = updateCandidates[i];
-          if (isBlank(p.projectId) || !validateNewProject(p)) return toast.error(`第 ${i + 1} 条项目必填项未填完整（带 * 的必填）`);
+          if (isBlank(p.projectId) || !validateNewProject(p)) {
+            if (updateProjectDraft && p.localId === updateProjectDraft.localId) {
+              setUpdateProjectErrors(getProjectErrors(updateProjectDraft));
+            }
+            return toast.error(`第 ${i + 1} 条项目必填项未填完整（带 * 的必填）`);
+          }
         }
         try {
           await runWithLimit(updateCandidates, REQUEST_CONCURRENCY, async (p) => {
@@ -818,6 +926,7 @@ export default function DailyFormTab() {
           setUpdateProjectDrafts([]);
           setUpdateProjectDraft(null);
           setProjectSearchKeyword("");
+          setUpdateProjectErrors([]);
         } catch (e: any) {
           console.error(e);
           return toast.error(e?.message || "更新项目失败");
@@ -878,7 +987,18 @@ export default function DailyFormTab() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>客户/部门简称 *</Label>
-                    <Input value={newClientDraft.shortName} onChange={(e) => setNewClientDraft({ ...newClientDraft, shortName: e.target.value })} />
+                    <Input
+                      value={newClientDraft.shortName}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setNewClientDraft({ ...newClientDraft, shortName: value });
+                        if (!isBlank(value)) {
+                          setNewClientErrors((prev) => prev.filter((field) => field !== "shortName"));
+                        }
+                      }}
+                      className={cn(hasError(newClientErrors, "shortName") && errorRingClass)}
+                    />
+                    {hasError(newClientErrors, "shortName") && <p className={errorTextClass}>必填项</p>}
                     <SearchList
                       items={newClientMatchResults.map((c: any) => {
                         const id = String(c?.customerId || c?.id || "").trim();
@@ -900,7 +1020,18 @@ export default function DailyFormTab() {
                   </div>
                   <div className="space-y-2">
                     <Label>企业名称 *</Label>
-                    <Input value={newClientDraft.companyName} onChange={(e) => setNewClientDraft({ ...newClientDraft, companyName: e.target.value })} />
+                    <Input
+                      value={newClientDraft.companyName}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setNewClientDraft({ ...newClientDraft, companyName: value });
+                        if (!isBlank(value)) {
+                          setNewClientErrors((prev) => prev.filter((field) => field !== "companyName"));
+                        }
+                      }}
+                      className={cn(hasError(newClientErrors, "companyName") && errorRingClass)}
+                    />
+                    {hasError(newClientErrors, "companyName") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>线索月份</Label>
@@ -913,15 +1044,51 @@ export default function DailyFormTab() {
                   </div>
                   <div className="space-y-2">
                     <Label>客户类型 *</Label>
-                    <OptionSelect value={newClientDraft.customerType} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, customerType: v })} placeholder="选择客户类型" options={customerTypeOptions} />
+                    <OptionSelect
+                      value={newClientDraft.customerType}
+                      onValueChange={(v) => {
+                        setNewClientDraft({ ...newClientDraft, customerType: v });
+                        if (!isBlank(v)) {
+                          setNewClientErrors((prev) => prev.filter((field) => field !== "customerType"));
+                        }
+                      }}
+                      placeholder="选择客户类型"
+                      options={customerTypeOptions}
+                      error={hasError(newClientErrors, "customerType")}
+                    />
+                    {hasError(newClientErrors, "customerType") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>客户等级 *</Label>
-                    <OptionSelect value={newClientDraft.level} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, level: v })} placeholder="选择等级" options={customerLevelOptions} />
+                    <OptionSelect
+                      value={newClientDraft.level}
+                      onValueChange={(v) => {
+                        setNewClientDraft({ ...newClientDraft, level: v });
+                        if (!isBlank(v)) {
+                          setNewClientErrors((prev) => prev.filter((field) => field !== "level"));
+                        }
+                      }}
+                      placeholder="选择等级"
+                      options={customerLevelOptions}
+                      error={hasError(newClientErrors, "level")}
+                    />
+                    {hasError(newClientErrors, "level") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>行业 *</Label>
-                    <OptionSelect value={newClientDraft.industry} onValueChange={(v) => setNewClientDraft({ ...newClientDraft, industry: v })} placeholder="选择行业" options={industryOptions} />
+                    <OptionSelect
+                      value={newClientDraft.industry}
+                      onValueChange={(v) => {
+                        setNewClientDraft({ ...newClientDraft, industry: v });
+                        if (!isBlank(v)) {
+                          setNewClientErrors((prev) => prev.filter((field) => field !== "industry"));
+                        }
+                      }}
+                      placeholder="选择行业"
+                      options={industryOptions}
+                      error={hasError(newClientErrors, "industry")}
+                    />
+                    {hasError(newClientErrors, "industry") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>主AI策略</Label>
@@ -929,7 +1096,19 @@ export default function DailyFormTab() {
                   </div>
                   <div className="space-y-2 sm:col-span-2">
                     <Label>公司地区 *</Label>
-                    <Input value={newClientDraft.hq} onChange={(e) => setNewClientDraft({ ...newClientDraft, hq: e.target.value })} placeholder="中国深圳/中国上海/新加坡" />
+                    <Input
+                      value={newClientDraft.hq}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setNewClientDraft({ ...newClientDraft, hq: value });
+                        if (!isBlank(value)) {
+                          setNewClientErrors((prev) => prev.filter((field) => field !== "hq"));
+                        }
+                      }}
+                      placeholder="中国深圳/中国上海/新加坡"
+                      className={cn(hasError(newClientErrors, "hq") && errorRingClass)}
+                    />
+                    {hasError(newClientErrors, "hq") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2 sm:col-span-2">
                     <div className="flex items-center gap-2">
@@ -942,9 +1121,14 @@ export default function DailyFormTab() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm text-muted-foreground">已添加 {newClientDrafts.length} 个新增客户</div>
                   <Button type="button" variant="outline" size="sm" onClick={() => {
-                    if (!validateNewClient(newClientDraft)) return toast.error("请把当前客户必填项填写完整后再添加下一条（带 * 的必填）");
+                    const errors = getNewClientErrors(newClientDraft);
+                    if (errors.length > 0) {
+                      setNewClientErrors(errors);
+                      return toast.error("请把当前客户必填项填写完整后再添加下一条（带 * 的必填）");
+                    }
                     setNewClientDrafts((prev) => [...prev, newClientDraft]);
                     setNewClientDraft(makeEmptyNewClient());
+                    setNewClientErrors([]);
                   }}>
                     <Plus className="mr-1 h-4 w-4" /> 添加更多客户
                   </Button>
@@ -1032,15 +1216,31 @@ export default function DailyFormTab() {
                         <Label>客户/部门简称 *</Label>
                         <Input
                           value={updateClientDraft.shortName}
-                          onChange={(e) => setUpdateClientDraft({ ...updateClientDraft, shortName: e.target.value })}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setUpdateClientDraft({ ...updateClientDraft, shortName: value });
+                            if (!isBlank(value)) {
+                              setUpdateClientErrors((prev) => prev.filter((field) => field !== "shortName"));
+                            }
+                          }}
+                          className={cn(hasError(updateClientErrors, "shortName") && errorRingClass)}
                         />
+                        {hasError(updateClientErrors, "shortName") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>企业名称 *</Label>
                         <Input
                           value={updateClientDraft.companyName}
-                          onChange={(e) => setUpdateClientDraft({ ...updateClientDraft, companyName: e.target.value })}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setUpdateClientDraft({ ...updateClientDraft, companyName: value });
+                            if (!isBlank(value)) {
+                              setUpdateClientErrors((prev) => prev.filter((field) => field !== "companyName"));
+                            }
+                          }}
+                          className={cn(hasError(updateClientErrors, "companyName") && errorRingClass)}
                         />
+                        {hasError(updateClientErrors, "companyName") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>线索月份</Label>
@@ -1055,19 +1255,33 @@ export default function DailyFormTab() {
                         <Label>客户类型 *</Label>
                         <OptionSelect
                           value={updateClientDraft.customerType}
-                          onValueChange={(v) => setUpdateClientDraft({ ...updateClientDraft, customerType: v })}
+                          onValueChange={(v) => {
+                            setUpdateClientDraft({ ...updateClientDraft, customerType: v });
+                            if (!isBlank(v)) {
+                              setUpdateClientErrors((prev) => prev.filter((field) => field !== "customerType"));
+                            }
+                          }}
                           placeholder="选择客户类型"
                           options={customerTypeOptions}
+                          error={hasError(updateClientErrors, "customerType")}
                         />
+                        {hasError(updateClientErrors, "customerType") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>客户等级 *</Label>
                         <OptionSelect
                           value={updateClientDraft.level}
-                          onValueChange={(v) => setUpdateClientDraft({ ...updateClientDraft, level: v })}
+                          onValueChange={(v) => {
+                            setUpdateClientDraft({ ...updateClientDraft, level: v });
+                            if (!isBlank(v)) {
+                              setUpdateClientErrors((prev) => prev.filter((field) => field !== "level"));
+                            }
+                          }}
                           placeholder="选择等级"
                           options={customerLevelOptions}
+                          error={hasError(updateClientErrors, "level")}
                         />
+                        {hasError(updateClientErrors, "level") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>合作状态</Label>
@@ -1084,10 +1298,17 @@ export default function DailyFormTab() {
                         <Label>行业 *</Label>
                         <OptionSelect
                           value={updateClientDraft.industry}
-                          onValueChange={(v) => setUpdateClientDraft({ ...updateClientDraft, industry: v })}
+                          onValueChange={(v) => {
+                            setUpdateClientDraft({ ...updateClientDraft, industry: v });
+                            if (!isBlank(v)) {
+                              setUpdateClientErrors((prev) => prev.filter((field) => field !== "industry"));
+                            }
+                          }}
                           placeholder="选择行业"
                           options={industryOptions}
+                          error={hasError(updateClientErrors, "industry")}
                         />
+                        {hasError(updateClientErrors, "industry") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>主AI策略</Label>
@@ -1102,9 +1323,17 @@ export default function DailyFormTab() {
                         <Label>公司地区 *</Label>
                         <Input
                           value={updateClientDraft.hq}
-                          onChange={(e) => setUpdateClientDraft({ ...updateClientDraft, hq: e.target.value })}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setUpdateClientDraft({ ...updateClientDraft, hq: value });
+                            if (!isBlank(value)) {
+                              setUpdateClientErrors((prev) => prev.filter((field) => field !== "hq"));
+                            }
+                          }}
                           placeholder="中国深圳/中国上海/新加坡"
+                          className={cn(hasError(updateClientErrors, "hq") && errorRingClass)}
                         />
+                        {hasError(updateClientErrors, "hq") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2 sm:col-span-2">
                         <div className="flex items-center gap-2">
@@ -1131,7 +1360,9 @@ export default function DailyFormTab() {
                         size="sm"
                         onClick={() => {
                           if (!updateClientDraft) return;
-                          if (!validateNewClient(updateClientDraft) || isBlank(updateClientDraft.customerId)) {
+                          const errors = getNewClientErrors(updateClientDraft);
+                          if (errors.length > 0 || isBlank(updateClientDraft.customerId)) {
+                            setUpdateClientErrors(errors);
                             return toast.error("请把当前客户必填项填写完整后再添加下一条（带 * 的必填）");
                           }
                           if (updateClientDrafts.some((x) => x.customerId === updateClientDraft.customerId)) {
@@ -1139,6 +1370,7 @@ export default function DailyFormTab() {
                           }
                           setUpdateClientDrafts((prev) => [...prev, updateClientDraft]);
                           setUpdateClientDraft(null);
+                          setUpdateClientErrors([]);
                         }}
                       >
                         <Plus className="mr-1 h-4 w-4" /> 更新更多客户
@@ -1189,7 +1421,9 @@ export default function DailyFormTab() {
                     value={newProjectCustomerKeyword}
                     onChange={(e) => setNewProjectCustomerKeyword(e.target.value)}
                     placeholder="输入客户简称/企业名称"
+                    className={cn(hasError(newProjectErrors, "customerId") && errorRingClass)}
                   />
+                  {hasError(newProjectErrors, "customerId") && <p className={errorTextClass}>请选择客户</p>}
                   <SearchList
                     items={newProjectCustomerResults.map((c: any) => ({
                       key: String(c.customerId || c.id),
@@ -1202,6 +1436,7 @@ export default function DailyFormTab() {
                           shortName: String(c.shortName || "").trim(),
                         }));
                         setNewProjectCustomerKeyword("");
+                        setNewProjectErrors((prev) => prev.filter((field) => field !== "customerId"));
                       },
                     }))}
                   />
@@ -1219,62 +1454,112 @@ export default function DailyFormTab() {
                     <Label>所属月份 *</Label>
                     <OptionSelect
                       value={newProjectDraft.month}
-                      onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, month: v })}
+                      onValueChange={(v) => {
+                        setNewProjectDraft({ ...newProjectDraft, month: v });
+                        if (!isBlank(v)) {
+                          setNewProjectErrors((prev) => prev.filter((field) => field !== "month"));
+                        }
+                      }}
                       placeholder="选择月份"
                       options={projectMonthOptions}
+                      error={hasError(newProjectErrors, "month")}
                     />
+                    {hasError(newProjectErrors, "month") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>服务类型 *</Label>
                     <OptionSelect
                       value={newProjectDraft.serviceType}
-                      onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, serviceType: v })}
+                      onValueChange={(v) => {
+                        setNewProjectDraft({ ...newProjectDraft, serviceType: v });
+                        if (!isBlank(v)) {
+                          setNewProjectErrors((prev) => prev.filter((field) => field !== "serviceType"));
+                        }
+                      }}
                       placeholder="选择服务类型"
                       options={serviceTypeOptions}
+                      error={hasError(newProjectErrors, "serviceType")}
                     />
+                    {hasError(newProjectErrors, "serviceType") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>活动&交付名称 *</Label>
                     <Input
                       value={newProjectDraft.campaignName}
-                      onChange={(e) => setNewProjectDraft({ ...newProjectDraft, campaignName: e.target.value })}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setNewProjectDraft({ ...newProjectDraft, campaignName: value });
+                        if (!isBlank(value)) {
+                          setNewProjectErrors((prev) => prev.filter((field) => field !== "campaignName"));
+                        }
+                      }}
+                      className={cn(hasError(newProjectErrors, "campaignName") && errorRingClass)}
                     />
+                    {hasError(newProjectErrors, "campaignName") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>平台 *</Label>
                     <OptionSelect
                       value={newProjectDraft.platform}
-                      onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, platform: v })}
+                      onValueChange={(v) => {
+                        setNewProjectDraft({ ...newProjectDraft, platform: v });
+                        if (!isBlank(v)) {
+                          setNewProjectErrors((prev) => prev.filter((field) => field !== "platform"));
+                        }
+                      }}
                       placeholder="选择平台"
                       options={platformOptions}
+                      error={hasError(newProjectErrors, "platform")}
                     />
+                    {hasError(newProjectErrors, "platform") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>项目类别 *</Label>
                     <OptionSelect
                       value={newProjectDraft.projectType}
-                      onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, projectType: v })}
+                      onValueChange={(v) => {
+                        setNewProjectDraft({ ...newProjectDraft, projectType: v });
+                        if (!isBlank(v)) {
+                          setNewProjectErrors((prev) => prev.filter((field) => field !== "projectType"));
+                        }
+                      }}
                       placeholder="选择类别"
                       options={projectTypeOptions}
+                      error={hasError(newProjectErrors, "projectType")}
                     />
+                    {hasError(newProjectErrors, "projectType") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>项目进度 *</Label>
                     <OptionSelect
                       value={newProjectDraft.stage}
-                      onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, stage: v })}
+                      onValueChange={(v) => {
+                        setNewProjectDraft({ ...newProjectDraft, stage: v });
+                        if (!isBlank(v)) {
+                          setNewProjectErrors((prev) => prev.filter((field) => field !== "stage"));
+                        }
+                      }}
                       placeholder="选择进度"
                       options={projectStageOptions}
+                      error={hasError(newProjectErrors, "stage")}
                     />
+                    {hasError(newProjectErrors, "stage") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>优先级 *</Label>
                     <OptionSelect
                       value={newProjectDraft.priority}
-                      onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, priority: v })}
+                      onValueChange={(v) => {
+                        setNewProjectDraft({ ...newProjectDraft, priority: v });
+                        if (!isBlank(v)) {
+                          setNewProjectErrors((prev) => prev.filter((field) => field !== "priority"));
+                        }
+                      }}
                       placeholder="选择优先级"
                       options={projectPriorityOptions}
+                      error={hasError(newProjectErrors, "priority")}
                     />
+                    {hasError(newProjectErrors, "priority") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>预估项目金额</Label>
@@ -1288,14 +1573,21 @@ export default function DailyFormTab() {
                     <Label>BD *</Label>
                     <OptionSelect
                       value={newProjectDraft.bd}
-                      onValueChange={(v) => setNewProjectDraft({ ...newProjectDraft, bd: v })}
+                      onValueChange={(v) => {
+                        setNewProjectDraft({ ...newProjectDraft, bd: v });
+                        if (!isBlank(v)) {
+                          setNewProjectErrors((prev) => prev.filter((field) => field !== "bd"));
+                        }
+                      }}
                       placeholder="选择BD"
                       options={
                         projectPersonOptions.bd.length > 0
                           ? projectPersonOptions.bd
                           : BD_OPTIONS
                       }
+                      error={hasError(newProjectErrors, "bd")}
                     />
+                    {hasError(newProjectErrors, "bd") && <p className={errorTextClass}>必填项</p>}
                   </div>
                   <div className="space-y-2">
                     <Label>AM</Label>
@@ -1380,65 +1672,123 @@ export default function DailyFormTab() {
                       </div>
                       <div className="space-y-2 sm:col-span-2">
                         <Label>客户ID（不可修改）</Label>
-                        <Input value={updateProjectDraft.customerId} disabled />
+                        <Input
+                          value={updateProjectDraft.customerId}
+                          disabled
+                          className={cn(hasError(updateProjectErrors, "customerId") && errorRingClass)}
+                        />
+                        {hasError(updateProjectErrors, "customerId") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>所属月份 *</Label>
                         <OptionSelect
                           value={updateProjectDraft.month}
-                          onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, month: v })}
+                          onValueChange={(v) => {
+                            setUpdateProjectDraft({ ...updateProjectDraft, month: v });
+                            if (!isBlank(v)) {
+                              setUpdateProjectErrors((prev) => prev.filter((field) => field !== "month"));
+                            }
+                          }}
                           placeholder="选择月份"
                           options={projectMonthOptions}
+                          error={hasError(updateProjectErrors, "month")}
                         />
+                        {hasError(updateProjectErrors, "month") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>服务类型 *</Label>
                         <OptionSelect
                           value={updateProjectDraft.serviceType}
-                          onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, serviceType: v })}
+                          onValueChange={(v) => {
+                            setUpdateProjectDraft({ ...updateProjectDraft, serviceType: v });
+                            if (!isBlank(v)) {
+                              setUpdateProjectErrors((prev) => prev.filter((field) => field !== "serviceType"));
+                            }
+                          }}
                           placeholder="选择服务类型"
                           options={serviceTypeOptions}
+                          error={hasError(updateProjectErrors, "serviceType")}
                         />
+                        {hasError(updateProjectErrors, "serviceType") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>活动&交付名称 *</Label>
-                        <Input value={updateProjectDraft.campaignName} onChange={(e) => setUpdateProjectDraft({ ...updateProjectDraft, campaignName: e.target.value })} />
+                        <Input
+                          value={updateProjectDraft.campaignName}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setUpdateProjectDraft({ ...updateProjectDraft, campaignName: value });
+                            if (!isBlank(value)) {
+                              setUpdateProjectErrors((prev) => prev.filter((field) => field !== "campaignName"));
+                            }
+                          }}
+                          className={cn(hasError(updateProjectErrors, "campaignName") && errorRingClass)}
+                        />
+                        {hasError(updateProjectErrors, "campaignName") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>平台 *</Label>
                         <OptionSelect
                           value={updateProjectDraft.platform}
-                          onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, platform: v })}
+                          onValueChange={(v) => {
+                            setUpdateProjectDraft({ ...updateProjectDraft, platform: v });
+                            if (!isBlank(v)) {
+                              setUpdateProjectErrors((prev) => prev.filter((field) => field !== "platform"));
+                            }
+                          }}
                           placeholder="选择平台"
                           options={platformOptions}
+                          error={hasError(updateProjectErrors, "platform")}
                         />
+                        {hasError(updateProjectErrors, "platform") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>项目类别 *</Label>
                         <OptionSelect
                           value={updateProjectDraft.projectType}
-                          onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, projectType: v })}
+                          onValueChange={(v) => {
+                            setUpdateProjectDraft({ ...updateProjectDraft, projectType: v });
+                            if (!isBlank(v)) {
+                              setUpdateProjectErrors((prev) => prev.filter((field) => field !== "projectType"));
+                            }
+                          }}
                           placeholder="选择类别"
                           options={projectTypeOptions}
+                          error={hasError(updateProjectErrors, "projectType")}
                         />
+                        {hasError(updateProjectErrors, "projectType") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>项目进度 *</Label>
                         <OptionSelect
                           value={updateProjectDraft.stage}
-                          onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, stage: v })}
+                          onValueChange={(v) => {
+                            setUpdateProjectDraft({ ...updateProjectDraft, stage: v });
+                            if (!isBlank(v)) {
+                              setUpdateProjectErrors((prev) => prev.filter((field) => field !== "stage"));
+                            }
+                          }}
                           placeholder="选择进度"
                           options={projectStageOptions}
+                          error={hasError(updateProjectErrors, "stage")}
                         />
+                        {hasError(updateProjectErrors, "stage") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>优先级 *</Label>
                         <OptionSelect
                           value={updateProjectDraft.priority}
-                          onValueChange={(v) => setUpdateProjectDraft({ ...updateProjectDraft, priority: v })}
+                          onValueChange={(v) => {
+                            setUpdateProjectDraft({ ...updateProjectDraft, priority: v });
+                            if (!isBlank(v)) {
+                              setUpdateProjectErrors((prev) => prev.filter((field) => field !== "priority"));
+                            }
+                          }}
                           placeholder="选择优先级"
                           options={projectPriorityOptions}
+                          error={hasError(updateProjectErrors, "priority")}
                         />
+                        {hasError(updateProjectErrors, "priority") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>预估项目金额</Label>
@@ -1448,16 +1798,21 @@ export default function DailyFormTab() {
                         <Label>BD *</Label>
                         <OptionSelect
                           value={updateProjectDraft.bd}
-                          onValueChange={(v) =>
-                            setUpdateProjectDraft({ ...updateProjectDraft, bd: v })
-                          }
+                          onValueChange={(v) => {
+                            setUpdateProjectDraft({ ...updateProjectDraft, bd: v });
+                            if (!isBlank(v)) {
+                              setUpdateProjectErrors((prev) => prev.filter((field) => field !== "bd"));
+                            }
+                          }}
                           placeholder="选择BD"
                           options={
                             projectPersonOptions.bd.length > 0
                               ? projectPersonOptions.bd
                               : BD_OPTIONS
                           }
+                          error={hasError(updateProjectErrors, "bd")}
                         />
+                        {hasError(updateProjectErrors, "bd") && <p className={errorTextClass}>必填项</p>}
                       </div>
                       <div className="space-y-2">
                         <Label>AM</Label>
@@ -1485,7 +1840,9 @@ export default function DailyFormTab() {
                         size="sm"
                         onClick={() => {
                           if (!updateProjectDraft) return;
-                          if (!validateNewProject(updateProjectDraft) || isBlank(updateProjectDraft.projectId)) {
+                          const errors = getProjectErrors(updateProjectDraft);
+                          if (errors.length > 0 || isBlank(updateProjectDraft.projectId)) {
+                            setUpdateProjectErrors(errors);
                             return toast.error("请把当前项目必填项填写完整后再添加下一条（带 * 的必填）");
                           }
                           if (updateProjectDrafts.some((x) => x.projectId === updateProjectDraft.projectId)) {
@@ -1493,6 +1850,7 @@ export default function DailyFormTab() {
                           }
                           setUpdateProjectDrafts((prev) => [...prev, updateProjectDraft]);
                           setUpdateProjectDraft(null);
+                          setUpdateProjectErrors([]);
                         }}
                       >
                         <Plus className="mr-1 h-4 w-4" /> 更新更多项目
@@ -1527,11 +1885,14 @@ export default function DailyFormTab() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    if (!validateNewProject(newProjectDraft)) {
+                    const errors = getProjectErrors(newProjectDraft);
+                    if (errors.length > 0) {
+                      setNewProjectErrors(errors);
                       return toast.error("请把当前项目必填项填写完整后再添加下一条（带 * 的必填）");
                     }
                     setNewProjectDrafts((prev) => [...prev, newProjectDraft]);
                     setNewProjectDraft(makeEmptyNewProjectDraft());
+                    setNewProjectErrors([]);
                   }}
                 >
                   <Plus className="mr-1 h-4 w-4" /> 新增更多项目
@@ -1557,16 +1918,47 @@ export default function DailyFormTab() {
             <CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" /> 步骤 3：今日商务时间</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Select value={selectedTimeProjectId} onValueChange={setSelectedTimeProjectId}>
-                <SelectTrigger className="flex-1"><SelectValue placeholder="选择项目" /></SelectTrigger>
-                <SelectContent>
-                  {timeProjectOptions.map((p: any) => (
-                    <SelectItem key={String(p.projectId)} value={String(p.projectId)}>{String(p.projectName || p.projectId)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input type="number" placeholder="小时" value={hoursInput} onChange={(e) => setHoursInput(e.target.value)} className="w-24" step="0.5" min="0" />
+            <div className="flex gap-2 items-start">
+              <div className="flex-1 space-y-1">
+                <Select
+                  value={selectedTimeProjectId}
+                  onValueChange={(v) => {
+                    setSelectedTimeProjectId(v);
+                    if (v) {
+                      setTimeEntryErrors((prev) => prev.filter((field) => field !== "project"));
+                    }
+                  }}
+                >
+                  <SelectTrigger className={cn("flex-1", hasError(timeEntryErrors, "project") && errorRingClass)}>
+                    <SelectValue placeholder="选择项目" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {timeProjectOptions.map((p: any) => (
+                      <SelectItem key={String(p.projectId)} value={String(p.projectId)}>{String(p.projectName || p.projectId)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {hasError(timeEntryErrors, "project") && <p className={errorTextClass}>请选择项目</p>}
+              </div>
+              <div className="w-24 space-y-1">
+                <Input
+                  type="number"
+                  placeholder="小时"
+                  value={hoursInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setHoursInput(value);
+                    const hours = parseFloat(value);
+                    if (value && Number.isFinite(hours) && hours > 0) {
+                      setTimeEntryErrors((prev) => prev.filter((field) => field !== "hours"));
+                    }
+                  }}
+                  className={cn(hasError(timeEntryErrors, "hours") && errorRingClass)}
+                  step="0.5"
+                  min="0"
+                />
+                {hasError(timeEntryErrors, "hours") && <p className={errorTextClass}>请输入有效时间</p>}
+              </div>
               <Button onClick={handleAddTimeEntry} size="icon" type="button"><Plus className="h-4 w-4" /></Button>
             </div>
 
@@ -1583,6 +1975,9 @@ export default function DailyFormTab() {
                 ))}
                 <div className="flex justify-end text-sm text-muted-foreground">总计：{timeEntries.reduce((sum, e) => sum + e.hours, 0)} 小时</div>
               </div>
+            )}
+            {hasError(timeEntryErrors, "entries") && (
+              <p className={errorTextClass}>请至少添加一个项目时间记录</p>
             )}
 
             <div className="flex justify-between pt-4">

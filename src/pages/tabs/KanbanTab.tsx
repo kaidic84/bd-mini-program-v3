@@ -4,36 +4,68 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LayoutGrid } from "lucide-react";
+import type { KanbanBoard } from "@/types/bd";
 
 const KanbanTab: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [boards, setBoards] = React.useState<KanbanBoard[]>([]);
+  const [activeBoardId, setActiveBoardId] = React.useState("");
   const [embedUrl, setEmbedUrl] = React.useState<string | null>(null);
 
-  const loadEmbed = React.useCallback(async () => {
+  const loadBoards = React.useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch("/api/kanban/embed", { cache: "no-store" });
+      const res = await fetch("/api/kanban/boards", { cache: "no-store" });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) {
         throw new Error(json?.error || `Request failed with status ${res.status}`);
       }
-      const url = String(json?.data?.url || "").trim();
-      if (!url) throw new Error("看板链接为空，请检查服务端配置");
-      setEmbedUrl(url);
+      const nextBoards = Array.isArray(json?.data) ? json.data : [];
+      if (nextBoards.length === 0) {
+        throw new Error("未配置任何看板，请检查服务端环境变量");
+      }
+      setBoards(nextBoards);
+      setActiveBoardId((prev) =>
+        nextBoards.some((board: KanbanBoard) => board.id === prev)
+          ? prev
+          : String(nextBoards[0]?.id || "")
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err ?? "");
       setError(message || "加载看板失败");
       setEmbedUrl(null);
+      setBoards([]);
+      setActiveBoardId("");
     } finally {
       setLoading(false);
     }
   }, []);
 
   React.useEffect(() => {
-    void loadEmbed();
-  }, [loadEmbed]);
+    void loadBoards();
+  }, [loadBoards]);
+
+  const activeBoard = React.useMemo(() => {
+    if (!boards.length) return null;
+    return boards.find((board) => board.id === activeBoardId) || boards[0];
+  }, [boards, activeBoardId]);
+
+  React.useEffect(() => {
+    if (!activeBoard) {
+      setEmbedUrl(null);
+      return;
+    }
+    const url = String(activeBoard.embedUrl || "").trim();
+    if (!url) {
+      setEmbedUrl(null);
+      setError("看板链接为空，请检查服务端配置");
+      return;
+    }
+    setError(null);
+    setEmbedUrl(url);
+  }, [activeBoard]);
 
   return (
     <div className="space-y-4">
@@ -47,13 +79,38 @@ const KanbanTab: React.FC = () => {
         </CardHeader>
       </Card>
 
+      {!loading && boards.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">选择看板</CardTitle>
+            <CardDescription>切换不同看板视角查看各板块的业务进度。</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {boards.map((board, index) => {
+              const isActive = board.id === (activeBoard?.id || "");
+              return (
+                <Button
+                  key={board.id}
+                  type="button"
+                  size="sm"
+                  variant={isActive ? "default" : "outline"}
+                  onClick={() => setActiveBoardId(board.id)}
+                >
+                  {board.name || `看板 ${index + 1}`}
+                </Button>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
       {loading && <Skeleton className="h-[60vh] w-full rounded-2xl" />}
 
       {!loading && error && (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
             <div>{error}</div>
-            <Button variant="outline" size="sm" onClick={loadEmbed}>
+            <Button variant="outline" size="sm" onClick={loadBoards}>
               重新加载
             </Button>
           </CardContent>
@@ -64,7 +121,7 @@ const KanbanTab: React.FC = () => {
         <div className="rounded-2xl border border-border/70 bg-card/70 p-2 shadow-sm">
           <div className="relative h-[70vh] min-h-[480px] w-full overflow-hidden rounded-xl bg-muted">
             <iframe
-              title="飞书看板"
+              title={activeBoard?.name || "飞书看板"}
               src={embedUrl}
               className="h-full w-full"
               loading="eager"
@@ -73,7 +130,9 @@ const KanbanTab: React.FC = () => {
             />
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
-            <span>内容来自飞书看板嵌套视图</span>
+            <span>
+              {activeBoard?.name || "当前看板"} · 内容来自飞书看板嵌套视图
+            </span>
             <a
               href={embedUrl}
               target="_blank"

@@ -144,7 +144,11 @@ const COST_TABLE_ID =
 
 const KANBAN_APP_TOKEN = process.env.FEISHU_KANBAN_APP_TOKEN || process.env.FEISHU_BITABLE_APP_TOKEN;
 const KANBAN_BOARD_ID = process.env.FEISHU_KANBAN_BOARD_ID;
+const KANBAN_BOARD_ID_2 = process.env.FEISHU_KANBAN_BOARD_ID_2;
+const KANBAN_BOARD_ID_3 = process.env.FEISHU_KANBAN_BOARD_ID_3;
 const KANBAN_EMBED_URL = process.env.FEISHU_KANBAN_EMBED_URL;
+const KANBAN_EMBED_URL_2 = process.env.FEISHU_KANBAN_EMBED_URL_2;
+const KANBAN_EMBED_URL_3 = process.env.FEISHU_KANBAN_EMBED_URL_3;
 const KANBAN_EMBED_BASE_URL = process.env.FEISHU_KANBAN_EMBED_BASE_URL;
 const DASHBOARD_EMBED_URL = process.env.FEISHU_DASHBOARD_EMBED_URL;
 const DAILY_FORM_URL = process.env.DAILY_FORM_URL || "";
@@ -527,15 +531,16 @@ function sendKanbanPlaceholder(res, data, extra = {}) {
 
 }
 
-function resolveKanbanEmbedUrl() {
-  const boardId = KANBAN_BOARD_ID || "";
+function resolveKanbanEmbedUrlForBoard(boardId, overrideEmbedUrl) {
+  const resolvedBoardId = String(boardId || "").trim();
+  const embedTemplate = String(overrideEmbedUrl || KANBAN_EMBED_URL || "").trim();
 
   const replaceBoardId = (value) => {
-    if (!value || !boardId) return value;
+    if (!value || !resolvedBoardId) return value;
     return value
-      .replaceAll("{boardId}", boardId)
-      .replaceAll("{{boardId}}", boardId)
-      .replaceAll("${boardId}", boardId);
+      .replaceAll("{boardId}", resolvedBoardId)
+      .replaceAll("{{boardId}}", resolvedBoardId)
+      .replaceAll("${boardId}", resolvedBoardId);
   };
 
   const withEmbedParams = (value) => {
@@ -554,24 +559,26 @@ function resolveKanbanEmbedUrl() {
     }
   };
 
-  if (KANBAN_EMBED_URL) {
-    return withEmbedParams(replaceBoardId(KANBAN_EMBED_URL));
+  if (embedTemplate) {
+    return withEmbedParams(replaceBoardId(embedTemplate));
   }
 
-  if (KANBAN_EMBED_BASE_URL && boardId) {
+  if (KANBAN_EMBED_BASE_URL && resolvedBoardId) {
     const normalizedBase = KANBAN_EMBED_BASE_URL.endsWith("/")
       ? KANBAN_EMBED_BASE_URL
       : `${KANBAN_EMBED_BASE_URL}/`;
-    return withEmbedParams(`${normalizedBase}${boardId}`);
+    return withEmbedParams(`${normalizedBase}${resolvedBoardId}`);
   }
 
   if (DASHBOARD_EMBED_URL) {
     try {
       const url = new URL(DASHBOARD_EMBED_URL);
-      if (boardId) {
+      if (resolvedBoardId) {
         const hash = url.hash.replace(/^#/, "");
         if (!hash.includes("block_id=")) {
-          url.hash = `block_id=${boardId}`;
+          url.hash = `block_id=${resolvedBoardId}`;
+        } else {
+          url.hash = hash.replace(/block_id=[^&]*/g, `block_id=${resolvedBoardId}`);
         }
       }
       return withEmbedParams(url.toString());
@@ -581,6 +588,30 @@ function resolveKanbanEmbedUrl() {
   }
 
   return "";
+}
+
+function resolveKanbanEmbedUrl() {
+  return resolveKanbanEmbedUrlForBoard(KANBAN_BOARD_ID || "", KANBAN_EMBED_URL);
+}
+
+function buildKanbanBoards() {
+  const boards = [];
+  const boardNames = ["客户看板", "项目看板", "立项看板"];
+  const pushBoard = (id, name, embedUrl) => {
+    const boardId = String(id || "").trim();
+    if (!boardId) return;
+    const embed = resolveKanbanEmbedUrlForBoard(boardId, embedUrl);
+    boards.push({
+      id: boardId,
+      name: String(name || "").trim() || "看板",
+      description: "飞书看板嵌套视图",
+      embedUrl: embed || null,
+    });
+  };
+  pushBoard(KANBAN_BOARD_ID, boardNames[0], KANBAN_EMBED_URL);
+  pushBoard(KANBAN_BOARD_ID_2, boardNames[1], KANBAN_EMBED_URL_2);
+  pushBoard(KANBAN_BOARD_ID_3, boardNames[2], KANBAN_EMBED_URL_3);
+  return boards;
 }
 
 
@@ -4691,8 +4722,13 @@ app.get("/api/project-persons", async (req, res) => {
 // ====== 看板（Kanban）接口预?======
 
 app.get("/api/kanban/embed", (req, res) => {
-  const url = resolveKanbanEmbedUrl();
-  if (!url) {
+  const requestedBoardId = String(req.query.boardId || "").trim();
+  const boards = buildKanbanBoards();
+  const board = requestedBoardId
+    ? boards.find((item) => item.id === requestedBoardId)
+    : boards[0];
+  const url = board?.embedUrl || resolveKanbanEmbedUrl();
+  if (!url || !board) {
     return res.status(500).json({
       success: false,
       error:
@@ -4703,23 +4739,20 @@ app.get("/api/kanban/embed", (req, res) => {
     success: true,
     data: {
       url,
-      boardId: KANBAN_BOARD_ID || null,
+      boardId: board.id || null,
+      name: board.name || null,
     },
   });
 });
 
 app.get("/api/kanban/boards", (req, res) => {
-
-  const boards = KANBAN_BOARD_ID
-
-    ? [{ id: KANBAN_BOARD_ID, name: "Feishu Kanban", description: "飞书看板占位" }]
-
-    : [];
-
+  const boards = buildKanbanBoards();
   return sendKanbanPlaceholder(res, boards, {
-
-    target: { appToken: KANBAN_APP_TOKEN || null, boardId: KANBAN_BOARD_ID || null },
-
+    target: {
+      appToken: KANBAN_APP_TOKEN || null,
+      boardId: KANBAN_BOARD_ID || null,
+      boardIds: boards.map((b) => b.id),
+    },
   });
 
 });
@@ -4727,15 +4760,9 @@ app.get("/api/kanban/boards", (req, res) => {
 
 
 app.get("/api/kanban/boards/:boardId", (req, res) => {
-
   const boardId = String(req.params.boardId || "").trim();
-
-  const board = boardId
-
-    ? { id: boardId, name: "Feishu Kanban", description: "飞书看板占位" }
-
-    : null;
-
+  const boards = buildKanbanBoards();
+  const board = boards.find((item) => item.id === boardId) || null;
   return sendKanbanPlaceholder(res, board);
 
 });

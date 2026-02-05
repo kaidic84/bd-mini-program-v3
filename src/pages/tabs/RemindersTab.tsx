@@ -1632,7 +1632,7 @@ const RemindersTab: React.FC = () => {
                 <ul className="list-disc list-inside ml-2 space-y-0.5">
                   <li>仅对 <strong>POC、方案&报价</strong> 类别启用提醒</li>
                   <li><strong>FA、丢单</strong> 阶段不设提醒</li>
-                  <li>每 <strong>4 个自然日</strong> 未跟新触发提醒</li>
+                  <li>每 <strong>4 个自然日</strong> 未更新触发提醒</li>
                   <li>超过<strong>7 个自然日</strong>未更新 → 黄色提醒</li>
                   <li>超过<strong>14 个自然日</strong>未更新 → 红色提醒</li>
                 </ul>

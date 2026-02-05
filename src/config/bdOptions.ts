@@ -21,8 +21,10 @@ export const PROJECT_PRIORITY_OPTIONS = ['P0', 'P1', 'P2'] as const;
 export type ProjectPriority = (typeof PROJECT_PRIORITY_OPTIONS)[number];
 
 export const PROJECT_PLATFORM_OPTIONS = [
-  '海外全平台',
-  '国内全平台',
+  '海外社媒全平台',
+  '国内社媒全平台',
+  '国内主流大模型',
+  '海外主流大模型',
   '海外电商',
   '国内电商',
   '小红书',
@@ -36,7 +38,7 @@ export const PROJECT_PLATFORM_OPTIONS = [
   'Reddit',
   '线下发布会/展会',
   '线下门店',
-  '私域/培训',
+  '私域/培训/经销商',
   '其他',
 ] as const;
 export type ProjectPlatform = (typeof PROJECT_PLATFORM_OPTIONS)[number];
@@ -120,14 +122,15 @@ export const COOPERATION_STATUS_OPTIONS = [
 ] as const;
 
 export const SERVICE_TYPE_OPTIONS = [
-  '达人营销',
-  '内容策划',
-  '直播带货',
-  '品牌传播',
-  '社媒运营',
-  '数据分析',
-  '培训咨询',
-  '技术服务',
+  '创意内容制作',
+  '线下空间&物料落地',
+  '品牌整合营销',
+  '矩阵号代运营',
+  '海外红人营销',
+  '分佣带货',
+  '工具 & API & 陪跑',
+  'AI 数字人 & 实时互动系统',
+  'GEO',
   '其他',
 ] as const;
 
