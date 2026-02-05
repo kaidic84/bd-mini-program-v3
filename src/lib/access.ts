@@ -10,7 +10,7 @@ export type Access = {
   canProjectAmount: boolean;
 };
 
-const FULL_ACCESS_USERS = new Set(["袁晓南", "邹思敏", "黄毅", "陈凯蒂", "侯昭薇"]);
+const FULL_ACCESS_USERS = new Set(["袁晓南", "邹思敏", "黄毅", "陈凯蒂", "侯昭薇", "孟子俊"]);
 const LIMITED_FULL_BUSINESS_USERS = new Set(["张一", "郑铭"]);
 
 export function getAccess(userName: string): Access {

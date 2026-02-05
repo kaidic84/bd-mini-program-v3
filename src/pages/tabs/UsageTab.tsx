@@ -32,9 +32,10 @@ const formatDateLabel = (value: string) => {
 };
 
 const GROUP_ORDER = [
-  { key: "bd", label: "BD", names: ["邹思敏", "袁晓南", "黄毅"] },
+  { key: "bd", label: "BD", names: ["邹思敏", "袁晓南", "黄毅", "徐泽玄"] },
   { key: "am", label: "AM", names: ["张一", "郑铭"] },
   { key: "pm", label: "PM", names: ["刘漫章"] },
+  { key: "finance", label: "财务", names: ["孟子俊"] },
   { key: "admin", label: "管理员", names: ["侯昭薇"] },
 ];
 
